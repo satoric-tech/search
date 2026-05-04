@@ -22,7 +22,8 @@
     "build": "tsc",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
-    "test": "npm run format:check && npm run build && node --test test/integration.js",
+    "test": "npm run format:check && npm run build",
+    "test:integration": "node --test test/integration.js",
     "prepublishOnly": "npm run build"
   },
   "engines": {
