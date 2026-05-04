@@ -1,3 +1,9 @@
+[![CI](https://github.com/satoric-tech/search/actions/workflows/ci.yml/badge.svg)](https://github.com/satoric-tech/search/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/%40satoric%2Fsearch?style=flat-square&color=CB3837)](https://www.npmjs.com/package/@satoric/search)
+[![License](https://img.shields.io/badge/license-MIT-007ec6?style=flat-square)](LICENSE)
+[![Discord](https://img.shields.io/badge/Discord-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/6kc2N9S3)
+[![X](https://img.shields.io/badge/satoric__tech-black?style=flat-square&logo=x&logoColor=white)](https://x.com/satoric_tech)
+
 Search Markdown and .txt pages from [llms.txt](https://llmstxt.org/) sites. Available as a CLI, SDK, MCP server, and agent skill.
 
 ## Installation
