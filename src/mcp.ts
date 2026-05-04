@@ -1,0 +1,184 @@
+import { version } from "./version.js";
+import { DEFAULT_BASE_URL, DEFAULT_LIMIT } from "./constants.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { createServer } from "http";
+
+function buildServer(baseUrl: string): Server {
+  const server = new Server({ name: "satoric", version: "0.1.0" }, { capabilities: { tools: {} } });
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      {
+        name: "search",
+        description:
+          "Search Markdown and .txt pages from llms.txt sites.\n\n" +
+          "Query syntax:\n" +
+          "- Plain query: searches across all sites\n" +
+          "  e.g. 'mcp server setup', 'oauth2 token refresh', 'rate limiting middleware'\n" +
+          "- Site-scoped ('site: query'): searches within a specific site matched by name or domain\n" +
+          "  e.g. 'stripe: webhook verification', 'mistral.ai: function calling', 'docs.aws.amazon.com: s3 presigned urls'\n" +
+          "- Exact phrase (quotes): requires the phrase to appear verbatim\n" +
+          "  e.g. '\"context window limit\"', 'vector database \"semantic search\"', 'stripe: \"webhook signature verification\"'\n\n" +
+          "Use site, title, and snippet in results to judge relevance. Fetch the url to read the full page.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            q: {
+              type: "string",
+              description:
+                "Search query. Supports plain queries, 'site: query' for site-scoped search, and quoted phrases for exact matches.",
+            },
+            limit: {
+              type: "integer",
+              description: "Max results to return (default: 10, max: 50)",
+              default: 10,
+            },
+            offset: {
+              type: "integer",
+              description: "Number of results to skip for pagination (default: 0)",
+              default: 0,
+            },
+          },
+          required: ["q"],
+        },
+      },
+    ],
+  }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+
+    if (name !== "search") {
+      return {
+        content: [{ type: "text" as const, text: `Unknown tool: ${name}` }],
+        isError: true,
+      };
+    }
+
+    const rawQ = args?.["q"];
+    if (typeof rawQ !== "string" || !rawQ.trim()) {
+      return {
+        content: [{ type: "text" as const, text: "Error: q is required" }],
+        isError: true,
+      };
+    }
+    const q = rawQ.trim();
+
+    const rawLimit = args?.["limit"];
+    const limit = Math.min(50, Math.max(1, Math.floor(Number(rawLimit) || DEFAULT_LIMIT)));
+    const rawOffset = args?.["offset"];
+    const offset = Math.max(0, Math.floor(Number(rawOffset) || 0));
+
+    const url = new URL(`${baseUrl}/search`);
+    url.searchParams.set("q", q);
+    url.searchParams.set("limit", String(limit));
+    if (offset > 0) url.searchParams.set("offset", String(offset));
+
+    try {
+      const response = await fetch(url.toString(), {
+        headers: {
+          "User-Agent": `satoric-mcp/${version}`,
+        },
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        const msg = body?.error ?? `HTTP ${response.status}`;
+        return {
+          content: [{ type: "text" as const, text: `Error: ${msg}` }],
+          isError: true,
+        };
+      }
+      const data = (await response.json()) as { results: unknown[]; total: number };
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(data.results, null, 2) }],
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  });
+
+  return server;
+}
+
+export async function runMcp(argv: string[]): Promise<void> {
+  let baseUrl = DEFAULT_BASE_URL;
+  let transport = "stdio";
+  let port = 4000;
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--help" || arg === "-h") {
+      process.stdout.write(
+        "Usage: satoric mcp [options]\n\n" +
+          "Options:\n" +
+          "  --transport <mode>     Transport mode: stdio or sse (default: stdio)\n" +
+          "  --port <n>             Port for SSE transport (default: 4000)\n" +
+          "  --help, -h             Show this help\n"
+      );
+      process.exit(0);
+    } else if (arg === "--url") {
+      const next = argv[i + 1];
+      if (!next || next.startsWith("-")) {
+        process.stderr.write("Error: --url requires a valid URL\n");
+        process.exit(1);
+      }
+      try {
+        new URL(next);
+      } catch {
+        process.stderr.write(`Error: invalid URL for --url: ${next}\n`);
+        process.exit(1);
+      }
+      baseUrl = argv[++i];
+    } else if (arg === "--transport" && argv[i + 1]) {
+      transport = argv[++i];
+    } else if (arg === "--port" && argv[i + 1]) {
+      port = parseInt(argv[++i], 10);
+    }
+  }
+
+  if (transport === "sse") {
+    const sessions = new Map<string, SSEServerTransport>();
+
+    const httpServer = createServer(async (req, res) => {
+      if (req.method === "GET" && req.url === "/sse") {
+        const t = new SSEServerTransport("/message", res);
+        sessions.set(t.sessionId, t);
+        res.on("close", () => sessions.delete(t.sessionId));
+        try {
+          await buildServer(baseUrl).connect(t);
+        } catch (e) {
+          process.stderr.write(`SSE connect error: ${(e as Error).message}\n`);
+          sessions.delete(t.sessionId);
+          if (!res.headersSent) res.writeHead(500).end("internal error");
+        }
+      } else if (req.method === "POST" && req.url?.startsWith("/message")) {
+        const sessionId = new URL(req.url, "http://x").searchParams.get("sessionId") ?? "";
+        const t = sessions.get(sessionId);
+        if (t) {
+          try {
+            await t.handlePostMessage(req, res);
+          } catch (e) {
+            process.stderr.write(`SSE message error: ${(e as Error).message}\n`);
+            if (!res.headersSent) res.writeHead(500).end("internal error");
+          }
+        } else {
+          res.writeHead(404).end("session not found");
+        }
+      } else {
+        res.writeHead(404).end();
+      }
+    });
+
+    httpServer.listen(port, () => {
+      process.stderr.write(`MCP SSE server listening on :${port}\n`);
+    });
+  } else {
+    await buildServer(baseUrl).connect(new StdioServerTransport());
+  }
+}
