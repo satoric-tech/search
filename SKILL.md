@@ -9,12 +9,12 @@ Satoric searches Markdown and .txt pages from [llms.txt](https://llmstxt.org/) s
 
 **Agent guidance:**
 - Use the default limit (10) unless there's a clear reason to fetch more
-- Prefer scoped queries (`site: query`) when the target site is known
-- Never use `--human` — always parse JSON output
+- Use field prefixes to scope queries when the target site or field is known
+- Always parse JSON output
 
 ## Query syntax
 
-Plain queries search across all sites:
+Plain queries search across site, title, and content:
 
 ```
 mcp server setup
@@ -24,14 +24,14 @@ oauth2 token refresh
 websocket reconnection strategy
 ```
 
-Scope a query to a specific site with `site: query`:
+Use field prefixes to scope where a term matches:
 
 ```
-stripe: webhook verification
-supabase: edge functions auth
-vercel: edge middleware caching
-mistral.ai: function calling               # match by domain
-docs.aws.amazon.com: s3 presigned urls     # match by subdomain
+site:stripe.com webhook verification
+site:supabase.com edge functions auth
+title:authentication
+content:webhook
+title:quickstart site:vercel.com
 ```
 
 Use quotes for exact phrase matching:
@@ -39,7 +39,21 @@ Use quotes for exact phrase matching:
 ```
 "context window limit"
 vector database "semantic search"
-stripe: "webhook signature verification"
+site:stripe.com "webhook signature verification"
+```
+
+Boolean operators:
+
+```
++stripe +webhook
+auth -deprecated
+stripe AND webhook
+```
+
+Boost a field:
+
+```
+title:auth^2.0 content:auth
 ```
 
 ## CLI
@@ -48,16 +62,14 @@ Search llms.txt pages from the command line: `npx @satoric/search search <query>
 
 ```bash
 npx @satoric/search search "mcp server setup"
-npx @satoric/search search "stripe: webhook verification" --limit 5
+npx @satoric/search search "site:stripe.com webhook verification" --limit 5
 npx @satoric/search search "redis connection pooling" --limit 10 --offset 3
-npx @satoric/search search "anthropic: tool function calling" --limit 5 --human
 ```
 
-| Flag              | Short | Default | Max  | Description                            |
-| ----------------- | ----- | ------- | ---- | -------------------------------------- |
-| `--limit <n>`     | `-l`  | `10`    | `50` | Max results to return                  |
-| `--offset <n>`    | `-o`  | `0`     | —    | Results to skip (for pagination)       |
-| `--human`         | —     | —       | —    | Human-readable output instead of JSON  |
+| Flag           | Short | Default | Max  | Description                      |
+| -------------- | ----- | ------- | ---- | -------------------------------- |
+| `--limit <n>`  | `-l`  | `10`    | `50` | Max results to return            |
+| `--offset <n>` | `-o`  | `0`     | —    | Results to skip (for pagination) |
 
 ## SDK
 
@@ -67,7 +79,7 @@ Import and call `search()` directly from TypeScript or JavaScript.
 import { search } from '@satoric/search';
 
 const results = await search("mcp server setup");
-const results = await search("stripe: webhook verification", { limit: 5 });
+const results = await search("site:stripe.com webhook verification", { limit: 5 });
 const results = await search("redis connection pooling", { limit: 10, offset: 3 });
 ```
 
@@ -99,12 +111,12 @@ Add to your MCP config to expose a `search` tool to your agents:
 
 ## API
 
-`GET https://search.satoric.ai/search` — returns a JSON object with `results` and `total`.
+`GET https://api.satoric.ai/search` — returns a JSON object with `results` and `total`.
 
 ```bash
-curl "https://search.satoric.ai/search?q=mcp+server+setup"
-curl "https://search.satoric.ai/search?q=stripe%3A+webhook+verification&limit=5"
-curl "https://search.satoric.ai/search?q=redis+connection+pooling&limit=10&offset=3"
+curl "https://api.satoric.ai/search?q=mcp+server+setup"
+curl "https://api.satoric.ai/search?q=site%3Astripe.com+webhook+verification&limit=5"
+curl "https://api.satoric.ai/search?q=redis+connection+pooling&limit=10&offset=3"
 ```
 
 | Parameter | Required | Default | Max  | Description                      |
