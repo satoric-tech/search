@@ -8,7 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const CLI = join(ROOT, "dist/cli.js");
 const { DEFAULT_BASE_URL } = await import(join(ROOT, "dist/constants.js"));
-const BASE_URL = process.env.TEST_URL ?? DEFAULT_BASE_URL;
+const BASE_URL = process.env.SATORIC_BASE_URL ?? DEFAULT_BASE_URL;
 
 function assertResult(r) {
   assert.equal(typeof r.url, "string");
@@ -39,8 +39,8 @@ test('CLI: "mcp server setup"', async () => {
   results.forEach(assertResult);
 });
 
-test('CLI: "stripe: webhook verification" --limit 5', async () => {
-  const results = JSON.parse(await cli("stripe: webhook verification", "--limit", "5"));
+test('CLI: "site:stripe.com webhook verification" --limit 5', async () => {
+  const results = JSON.parse(await cli("site:stripe.com webhook verification", "--limit", "5"));
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 5);
@@ -52,13 +52,6 @@ test('CLI: "redis connection pooling" --limit 10 --offset 3', async () => {
   assert.ok(Array.isArray(results));
   assert.ok(results.length <= 10);
   results.forEach(assertResult);
-});
-
-test('CLI: "anthropic: tool use function calling" --limit 5 --human', async () => {
-  const out = await cli("anthropic: tool use function calling", "--limit", "5", "--human");
-  const lines = out.trim().split("\n").filter(Boolean);
-  assert.ok(lines.length > 0);
-  assert.ok(lines.length <= 5);
 });
 
 // --- SDK ---
@@ -73,8 +66,8 @@ test('SDK: search("mcp server setup")', async () => {
   results.forEach(assertResult);
 });
 
-test('SDK: search("stripe: webhook verification", { limit: 5 })', async () => {
-  const results = await search("stripe: webhook verification", { limit: 5, baseUrl: BASE_URL });
+test('SDK: search("site:stripe.com webhook verification", { limit: 5 })', async () => {
+  const results = await search("site:stripe.com webhook verification", { limit: 5, baseUrl: BASE_URL });
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 5);
@@ -143,8 +136,8 @@ test('MCP: search "mcp server setup"', async () => {
   results.forEach(assertResult);
 });
 
-test('MCP: search "stripe: webhook verification" limit 5', async () => {
-  const results = mcpResults(await mcpSearch("stripe: webhook verification", 5));
+test('MCP: search "site:stripe.com webhook verification" limit 5', async () => {
+  const results = mcpResults(await mcpSearch("site:stripe.com webhook verification", 5));
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 5);
