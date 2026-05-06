@@ -111,7 +111,7 @@ function buildServer(baseUrl: string): Server {
 }
 
 export async function runMcp(argv: string[]): Promise<void> {
-  let baseUrl = DEFAULT_BASE_URL;
+  const baseUrl = DEFAULT_BASE_URL;
   let transport = "stdio";
   let port = 4000;
 
@@ -126,19 +126,6 @@ export async function runMcp(argv: string[]): Promise<void> {
           "  --help, -h             Show this help\n"
       );
       process.exit(0);
-    } else if (arg === "--url") {
-      const next = argv[i + 1];
-      if (!next || next.startsWith("-")) {
-        process.stderr.write("Error: --url requires a valid URL\n");
-        process.exit(1);
-      }
-      try {
-        new URL(next);
-      } catch {
-        process.stderr.write(`Error: invalid URL for --url: ${next}\n`);
-        process.exit(1);
-      }
-      baseUrl = argv[++i];
     } else if (arg === "--transport" && argv[i + 1]) {
       transport = argv[++i];
     } else if (arg === "--port" && argv[i + 1]) {

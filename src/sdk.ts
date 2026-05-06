@@ -4,7 +4,9 @@ import { DEFAULT_BASE_URL, DEFAULT_LIMIT } from "./constants.js";
 export interface SearchResult {
   url: string;
   site: string;
+  site_name: string;
   title: string;
+  description: string;
   snippet: string;
 }
 

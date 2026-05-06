@@ -7,8 +7,7 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const CLI = join(ROOT, "dist/cli.js");
-const { DEFAULT_BASE_URL } = await import(join(ROOT, "dist/constants.js"));
-const BASE_URL = process.env.SATORIC_BASE_URL ?? DEFAULT_BASE_URL;
+const BASE_URL = process.env.SATORIC_BASE_URL ?? "https://api.satoric.ai";
 
 function assertResult(r) {
   assert.equal(typeof r.url, "string");
@@ -19,7 +18,9 @@ function assertResult(r) {
 
 function cli(...args) {
   return new Promise((resolve, reject) => {
-    const proc = spawn("node", [CLI, "search", ...args, "--url", BASE_URL]);
+    const proc = spawn("node", [CLI, "search", ...args], {
+      env: { ...process.env, SATORIC_BASE_URL: BASE_URL },
+    });
     let stdout = "";
     proc.stdout.on("data", d => (stdout += d));
     proc.stderr.on("data", d => process.stderr.write(d));
@@ -59,7 +60,7 @@ test('CLI: "redis connection pooling" --limit 10 --offset 3', async () => {
 const { search } = await import(join(ROOT, "dist/sdk.js"));
 
 test('SDK: search("mcp server setup")', async () => {
-  const results = await search("mcp server setup", { baseUrl: BASE_URL });
+  const results = await search("mcp server setup");
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 10);
@@ -67,7 +68,7 @@ test('SDK: search("mcp server setup")', async () => {
 });
 
 test('SDK: search("site:stripe.com webhook verification", { limit: 5 })', async () => {
-  const results = await search("site:stripe.com webhook verification", { limit: 5, baseUrl: BASE_URL });
+  const results = await search("site:stripe.com webhook verification", { limit: 5 });
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 5);
@@ -75,7 +76,7 @@ test('SDK: search("site:stripe.com webhook verification", { limit: 5 })', async 
 });
 
 test('SDK: search("redis connection pooling", { limit: 10, offset: 3 })', async () => {
-  const results = await search("redis connection pooling", { limit: 10, offset: 3, baseUrl: BASE_URL });
+  const results = await search("redis connection pooling", { limit: 10, offset: 3 });
   assert.ok(Array.isArray(results));
   assert.ok(results.length <= 10);
   results.forEach(assertResult);
@@ -85,7 +86,9 @@ test('SDK: search("redis connection pooling", { limit: 10, offset: 3 })', async 
 
 function mcpSearch(q, limit, offset) {
   return new Promise((resolve, reject) => {
-    const proc = spawn("node", [CLI, "mcp", "--url", BASE_URL]);
+    const proc = spawn("node", [CLI, "mcp"], {
+      env: { ...process.env, SATORIC_BASE_URL: BASE_URL },
+    });
     const responses = [];
     let buf = "";
 

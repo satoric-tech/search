@@ -36,8 +36,6 @@ export async function runSearch(argv: string[]): Promise<void> {
       limit = parseInt(argv[++i] ?? "10", 10);
     } else if (arg === "--offset" || arg === "-o") {
       offset = parseInt(argv[++i] ?? "0", 10);
-    } else if (arg === "--url" || arg === "-u") {
-      baseUrl = argv[++i] ?? baseUrl;
     } else if (!arg.startsWith("-")) {
       positional.push(arg);
     }
