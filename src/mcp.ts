@@ -16,12 +16,16 @@ function buildServer(baseUrl: string): Server {
         description:
           "Search Markdown and .txt pages from llms.txt sites.\n\n" +
           "Query syntax:\n" +
-          "- Plain query: searches across all sites\n" +
+          "- Plain query: searches across site, title, and content\n" +
           "  e.g. 'mcp server setup', 'oauth2 token refresh', 'rate limiting middleware'\n" +
-          "- Site-scoped ('site: query'): searches within a specific site matched by name or domain\n" +
-          "  e.g. 'stripe: webhook verification', 'mistral.ai: function calling', 'docs.aws.amazon.com: s3 presigned urls'\n" +
+          "- Field-scoped: prefix a term with a field name to restrict where it matches\n" +
+          "  site:<domain>   e.g. 'site:stripe.com webhook verification'\n" +
+          "  title:<term>    e.g. 'title:authentication'\n" +
+          "  content:<term>  e.g. 'content:webhook'\n" +
           "- Exact phrase (quotes): requires the phrase to appear verbatim\n" +
-          "  e.g. '\"context window limit\"', 'vector database \"semantic search\"', 'stripe: \"webhook signature verification\"'\n\n" +
+          "  e.g. '\"context window limit\"', 'vector database \"semantic search\"'\n" +
+          "- Boolean: AND / OR, + (must include), - (exclude)\n" +
+          "  e.g. '+stripe +webhook', 'auth -deprecated'\n\n" +
           "Use site, title, and snippet in results to judge relevance. Fetch the url to read the full page.",
         inputSchema: {
           type: "object" as const,
@@ -29,7 +33,7 @@ function buildServer(baseUrl: string): Server {
             q: {
               type: "string",
               description:
-                "Search query. Supports plain queries, 'site: query' for site-scoped search, and quoted phrases for exact matches.",
+                "Search query. Supports plain queries, field prefixes (site:, title:, content:), quoted phrases, and boolean operators (+, -, AND, OR).",
             },
             limit: {
               type: "integer",
