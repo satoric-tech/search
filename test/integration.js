@@ -12,7 +12,9 @@ const BASE_URL = process.env.SATORIC_BASE_URL ?? "https://api.satoric.ai";
 function assertResult(r) {
   assert.equal(typeof r.url, "string");
   assert.equal(typeof r.site, "string");
+  assert.equal(typeof r.site_name, "string");
   assert.equal(typeof r.title, "string");
+  assert.equal(typeof r.description, "string");
   assert.equal(typeof r.snippet, "string");
 }
 
