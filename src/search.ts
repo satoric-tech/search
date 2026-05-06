@@ -12,7 +12,6 @@ export async function runSearch(argv: string[]): Promise<void> {
   const positional: string[] = [];
   let limit = DEFAULT_LIMIT;
   let offset = 0;
-  let human = false;
   let baseUrl = DEFAULT_BASE_URL;
 
   for (let i = 0; i < argv.length; i++) {
@@ -21,12 +20,15 @@ export async function runSearch(argv: string[]): Promise<void> {
       process.stdout.write(
         "Usage: satoric search <query> [options]\n\n" +
           "Query syntax:\n" +
-          "  <query>              Search all pages across all sites\n" +
-          "  <site>: <query>      Match site name in title, query in content\n\n" +
+          "  <query>              Search across site, title, and content\n" +
+          "  site:<domain>        Scope to a domain  e.g. site:stripe.com\n" +
+          "  title:<term>         Match page title   e.g. title:authentication\n" +
+          "  content:<term>       Match page body    e.g. content:webhook\n" +
+          '  "phrase"             Exact phrase match e.g. "webhook signature"\n' +
+          "  +term -term          Require / exclude terms\n\n" +
           "Options:\n" +
           "  --limit,  -l <n>    Max results (default: 10)\n" +
           "  --offset, -o <n>    Results to skip, for pagination (default: 0)\n" +
-          "  --human             Human-readable output instead of JSON\n" +
           "  --help,  -h         Show this help\n"
       );
       process.exit(0);
@@ -34,8 +36,6 @@ export async function runSearch(argv: string[]): Promise<void> {
       limit = parseInt(argv[++i] ?? "10", 10);
     } else if (arg === "--offset" || arg === "-o") {
       offset = parseInt(argv[++i] ?? "0", 10);
-    } else if (arg === "--human") {
-      human = true;
     } else if (arg === "--url" || arg === "-u") {
       baseUrl = argv[++i] ?? baseUrl;
     } else if (!arg.startsWith("-")) {
@@ -78,18 +78,5 @@ export async function runSearch(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  if (data.results.length === 0) {
-    process.stdout.write(human ? "no results\n" : JSON.stringify([]) + "\n");
-    return;
-  }
-
-  if (human) {
-    for (const r of data.results) {
-      process.stdout.write(
-        `[${r.site}] ${r.title} — ${r.url}${r.snippet ? ` — ${r.snippet}` : ""}\n`
-      );
-    }
-  } else {
-    process.stdout.write(JSON.stringify(data.results, null, 2) + "\n");
-  }
+  process.stdout.write(JSON.stringify(data.results, null, 2) + "\n");
 }
