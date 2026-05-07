@@ -12,7 +12,7 @@ export async function runSearch(argv: string[]): Promise<void> {
   const positional: string[] = [];
   let limit = DEFAULT_LIMIT;
   let offset = 0;
-  let baseUrl = DEFAULT_BASE_URL;
+  const baseUrl = DEFAULT_BASE_URL;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
