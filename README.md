@@ -3,7 +3,7 @@
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/satoric-tech/search/main/assets/logo_light.png" />
-    <img src="https://raw.githubusercontent.com/satoric-tech/search/main/assets/logo_dark.png" alt="Satoric" width="375" />
+    <img src="https://raw.githubusercontent.com/satoric-tech/search/main/assets/logo_dark.png" alt="Satoric" width="400" />
   </picture>
 </div>
 
