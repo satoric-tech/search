@@ -34,24 +34,24 @@ function cli(...args) {
 
 // --- CLI ---
 
-test('CLI: "mcp server setup"', async () => {
-  const results = JSON.parse(await cli("mcp server setup"));
+test('CLI: +site:stripe.com "webhook signature" -title:deprecated content:verification^2.0', async () => {
+  const results = JSON.parse(await cli('+site:stripe.com "webhook signature" -title:deprecated content:verification^2.0'));
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 10);
   results.forEach(assertResult);
 });
 
-test('CLI: "site:stripe.com webhook verification" --limit 5', async () => {
-  const results = JSON.parse(await cli("site:stripe.com webhook verification", "--limit", "5"));
+test('CLI: site:supabase.com (edge functions OR "row level security") -title:changelog --limit 5', async () => {
+  const results = JSON.parse(await cli('site:supabase.com (edge functions OR "row level security") -title:changelog', "--limit", "5"));
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 5);
   results.forEach(assertResult);
 });
 
-test('CLI: "redis connection pooling" --limit 10 --offset 3', async () => {
-  const results = JSON.parse(await cli("redis connection pooling", "--limit", "10", "--offset", "3"));
+test('CLI: title:quickstart^2.0 content:authentication site:clerk.com --limit 10 --offset 3', async () => {
+  const results = JSON.parse(await cli("title:quickstart^2.0 content:authentication site:clerk.com", "--limit", "10", "--offset", "3"));
   assert.ok(Array.isArray(results));
   assert.ok(results.length <= 10);
   results.forEach(assertResult);
@@ -61,24 +61,24 @@ test('CLI: "redis connection pooling" --limit 10 --offset 3', async () => {
 
 const { search } = await import(join(ROOT, "dist/sdk.js"));
 
-test('SDK: search("mcp server setup")', async () => {
-  const results = await search("mcp server setup");
+test('SDK: search("+site:stripe.com \\"webhook signature\\" -title:deprecated content:verification^2.0")', async () => {
+  const results = await search('+site:stripe.com "webhook signature" -title:deprecated content:verification^2.0');
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 10);
   results.forEach(assertResult);
 });
 
-test('SDK: search("site:stripe.com webhook verification", { limit: 5 })', async () => {
-  const results = await search("site:stripe.com webhook verification", { limit: 5 });
+test('SDK: search("site:supabase.com (edge functions OR \\"row level security\\") -title:changelog", { limit: 5 })', async () => {
+  const results = await search('site:supabase.com (edge functions OR "row level security") -title:changelog', { limit: 5 });
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 5);
   results.forEach(assertResult);
 });
 
-test('SDK: search("redis connection pooling", { limit: 10, offset: 3 })', async () => {
-  const results = await search("redis connection pooling", { limit: 10, offset: 3 });
+test('SDK: search("title:quickstart^2.0 content:authentication site:clerk.com", { limit: 10, offset: 3 })', async () => {
+  const results = await search("title:quickstart^2.0 content:authentication site:clerk.com", { limit: 10, offset: 3 });
   assert.ok(Array.isArray(results));
   assert.ok(results.length <= 10);
   results.forEach(assertResult);
@@ -133,24 +133,24 @@ function mcpResults(responses) {
   return JSON.parse(call.result.content[0].text);
 }
 
-test('MCP: search "mcp server setup"', async () => {
-  const results = mcpResults(await mcpSearch("mcp server setup"));
+test('MCP: search "+site:stripe.com \\"webhook signature\\" -title:deprecated content:verification^2.0"', async () => {
+  const results = mcpResults(await mcpSearch('+site:stripe.com "webhook signature" -title:deprecated content:verification^2.0'));
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 10);
   results.forEach(assertResult);
 });
 
-test('MCP: search "site:stripe.com webhook verification" limit 5', async () => {
-  const results = mcpResults(await mcpSearch("site:stripe.com webhook verification", 5));
+test('MCP: search "site:supabase.com (edge functions OR \\"row level security\\") -title:changelog" limit 5', async () => {
+  const results = mcpResults(await mcpSearch('site:supabase.com (edge functions OR "row level security") -title:changelog', 5));
   assert.ok(Array.isArray(results));
   assert.ok(results.length > 0);
   assert.ok(results.length <= 5);
   results.forEach(assertResult);
 });
 
-test('MCP: search "redis connection pooling" limit 10 offset 3', async () => {
-  const results = mcpResults(await mcpSearch("redis connection pooling", 10, 3));
+test('MCP: search "title:quickstart^2.0 content:authentication site:clerk.com" limit 10 offset 3', async () => {
+  const results = mcpResults(await mcpSearch("title:quickstart^2.0 content:authentication site:clerk.com", 10, 3));
   assert.ok(Array.isArray(results));
   assert.ok(results.length <= 10);
   results.forEach(assertResult);
