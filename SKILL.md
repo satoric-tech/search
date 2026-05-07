@@ -1,59 +1,47 @@
 ---
 name: satoric
-description: Search developer docs, APIs, and technical pages from across the web.
+description: Full-text web search engine for developer docs.
 ---
 
 # Satoric Search Skill
 
-Satoric searches Markdown and .txt pages from [llms.txt](https://llmstxt.org/) sites.
-
-**Agent guidance:**
-- Use the default limit (10) unless there's a clear reason to fetch more
-- Use field prefixes to scope queries when the target site or field is known
-- Always parse JSON output
+Satoric is a full-text web search engine for developer docs, APIs, and technical references from [llms.txt](https://llmstxt.org/) sites.
 
 ## Query syntax
 
-Plain queries search across site, title, and content:
+Run plain queries to search across all fields and sites:
 
 ```
 mcp server setup
-vector database embeddings
 rate limiting middleware
 oauth2 token refresh
-websocket reconnection strategy
 ```
 
-Use field prefixes to scope where a term matches:
+Use field prefixes to scope to a specific domain or field:
+
+| Prefix | Description | Example |
+| --- | --- | --- |
+| `site:` | Scope to a domain | `site:stripe.com webhook` |
+| `title:` | Search page titles | `title:authentication` |
+| `content:` | Search page body | `content:webhook` |
+
+Write precise queries with Tantivy-style syntax:
+
+| Syntax | Description | Example |
+| --- | --- | --- |
+| `"…"` | Exact phrase | `"webhook signature"` |
+| `+` / `-` | Must appear / exclude | `+stripe -deprecated` |
+| `AND` / `OR` / `NOT` | Boolean operators | `stripe AND webhook` |
+| `( )` | Group expressions | `(auth OR oauth) site:clerk.com` |
+| `^` | Boost a term | `title:auth^2.0 content:auth` |
+| `~` | Fuzzy / phrase slop | `webhook~1` / `"big wolf"~1` |
+
+Combine operators for expressive queries:
 
 ```
-site:stripe.com webhook verification
-site:supabase.com edge functions auth
-title:authentication
-content:webhook
-title:quickstart site:vercel.com
-```
-
-Use quotes for exact phrase matching:
-
-```
-"context window limit"
-vector database "semantic search"
-site:stripe.com "webhook signature verification"
-```
-
-Boolean operators:
-
-```
-+stripe +webhook
-auth -deprecated
-stripe AND webhook
-```
-
-Boost a field:
-
-```
-title:auth^2.0 content:auth
++site:stripe.com "webhook signature" -title:deprecated content:verification^2.0
+site:supabase.com (edge functions OR "row level security") -title:changelog
+title:quickstart^2.0 content:authentication site:clerk.com
 ```
 
 ## CLI
@@ -63,81 +51,36 @@ Search llms.txt pages from the command line: `npx @satoric/search search <query>
 ```bash
 npx @satoric/search search "mcp server setup"
 npx @satoric/search search "site:stripe.com webhook verification" --limit 5
-npx @satoric/search search "redis connection pooling" --limit 10 --offset 3
+npx @satoric/search search '+redis "connection pooling" content:pool^1.5' --limit 10 --offset 3
 ```
+
+Supported flags:
 
 | Flag           | Short | Default | Max  | Description                      |
 | -------------- | ----- | ------- | ---- | -------------------------------- |
 | `--limit <n>`  | `-l`  | `10`    | `50` | Max results to return            |
 | `--offset <n>` | `-o`  | `0`     | —    | Results to skip (for pagination) |
 
-## SDK
+## Output
 
-Import and call `search()` directly from TypeScript or JavaScript.
-
-```typescript
-import { search } from '@satoric/search';
-
-const results = await search("mcp server setup");
-const results = await search("site:stripe.com webhook verification", { limit: 5 });
-const results = await search("redis connection pooling", { limit: 10, offset: 3 });
-```
-
-| Option   | Type     | Default | Max  | Description                      |
-| -------- | -------- | ------- | ---- | -------------------------------- |
-| `limit`  | `number` | `10`    | `50` | Max results to return            |
-| `offset` | `number` | `0`     | —    | Results to skip (for pagination) |
-
-## MCP
-
-Add to your MCP config to expose a `search` tool to your agents:
+Each API call returns a list of results with metadata and a relevant snippet, along with pagination info:
 
 ```json
 {
-  "mcpServers": {
-    "satoric": {
-      "command": "npx",
-      "args": ["@satoric/search", "mcp"]
-    }
-  }
+  "results": [
+    {
+      "url": "https://upstash.com/docs/redis/quickstart",
+      "site": "upstash.com",
+      "site_name": "Upstash",
+      "title": "Redis Quickstart",
+      "description": "A short summary of the page content.",
+      "snippet": "The passage most relevant to your query."
+    },
+    ...
+  ],
+  "total": 42,
+  "limit": 10,
+  "offset": 0
 }
 ```
 
-| Parameter | Required | Default | Max  | Description                      |
-| --------- | -------- | ------- | ---- | -------------------------------- |
-| `q`       | yes      | —       | —    | Search query                     |
-| `limit`   | no       | `10`    | `50` | Max results to return            |
-| `offset`  | no       | `0`     | —    | Results to skip (for pagination) |
-
-## API
-
-`GET https://api.satoric.ai/search` — returns a JSON object with `results` and `total`.
-
-```bash
-curl "https://api.satoric.ai/search?q=mcp+server+setup"
-curl "https://api.satoric.ai/search?q=site%3Astripe.com+webhook+verification&limit=5"
-curl "https://api.satoric.ai/search?q=redis+connection+pooling&limit=10&offset=3"
-```
-
-| Parameter | Required | Default | Max  | Description                      |
-| --------- | -------- | ------- | ---- | -------------------------------- |
-| `q`       | yes      | —       | —    | Search query                     |
-| `limit`   | no       | `10`    | `50` | Max results to return            |
-| `offset`  | no       | `0`     | —    | Results to skip (for pagination) |
-
-## Output
-
-Results are returned as a JSON array:
-
-```json
-[
-  {
-    "url": "https://upstash.com/docs/redis/quickstart",
-    "site": "Upstash",
-    "title": "Redis Quickstart",
-    "snippet": "Connect to your Upstash Redis database using the REST API or a compatible client."
-  }
-]
-```
-
-Use `site`, `title`, and `snippet` to decide relevance. Use `url` to fetch the full page.
