@@ -14,26 +14,33 @@ function buildServer(baseUrl: string): Server {
       {
         name: "search",
         description:
-          "Search Markdown and .txt pages from llms.txt sites.\n\n" +
-          "Query syntax:\n" +
-          "- Plain query: searches across site, title, and content\n" +
-          "  e.g. 'mcp server setup', 'oauth2 token refresh', 'rate limiting middleware'\n" +
-          "- Field-scoped: prefix a term with a field name to restrict where it matches\n" +
-          "  site:<domain>   e.g. 'site:stripe.com webhook verification'\n" +
-          "  title:<term>    e.g. 'title:authentication'\n" +
-          "  content:<term>  e.g. 'content:webhook'\n" +
-          "- Exact phrase (quotes): requires the phrase to appear verbatim\n" +
-          "  e.g. '\"context window limit\"', 'vector database \"semantic search\"'\n" +
-          "- Boolean: AND / OR, + (must include), - (exclude)\n" +
-          "  e.g. '+stripe +webhook', 'auth -deprecated'\n\n" +
-          "Use site, title, and snippet in results to judge relevance. Fetch the url to read the full page.",
+          "Full-text search across developer docs, APIs, and technical references indexed from llms.txt sites.\n\n" +
+          "Run plain queries to search across all fields and sites:\n" +
+          "  mcp server setup\n" +
+          "  rate limiting middleware\n" +
+          "  oauth2 token refresh\n\n" +
+          "Use field prefixes to scope to a specific domain or field:\n" +
+          "  site:<domain>   e.g. site:stripe.com webhook\n" +
+          "  title:<term>    e.g. title:authentication\n" +
+          "  content:<term>  e.g. content:webhook\n\n" +
+          "Write precise queries with Lucene query syntax:\n" +
+          '  "..."          exact phrase         "webhook signature"\n' +
+          "  + / -          must / exclude       +stripe -deprecated\n" +
+          "  AND / OR / NOT boolean operators    stripe AND webhook\n" +
+          "  ( )            group expressions    (auth OR oauth) site:clerk.com\n" +
+          "  ^              boost a term         title:auth^2.0 content:auth\n" +
+          '  ~              fuzzy / phrase slop  webhook~1 / "big wolf"~1\n\n' +
+          "Combine operators for expressive queries:\n" +
+          '  +site:stripe.com "webhook signature" -title:deprecated content:verification^2.0\n' +
+          '  site:supabase.com (edge functions OR "row level security") -title:changelog\n' +
+          "  title:quickstart^2.0 content:authentication site:clerk.com",
         inputSchema: {
           type: "object" as const,
           properties: {
             q: {
               type: "string",
               description:
-                "Search query. Supports plain queries, field prefixes (site:, title:, content:), quoted phrases, and boolean operators (+, -, AND, OR).",
+                "Search query. Supports plain queries, field prefixes (site:, title:, content:), Lucene query syntax (quoted phrases, +/-, AND/OR/NOT, grouping, boosting, fuzzy).",
             },
             limit: {
               type: "integer",
