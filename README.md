@@ -51,7 +51,7 @@ Field prefixes scope queries to a specific domain or field:
 | `title:` | Search page titles | `title:authentication` |
 | `content:` | Search page body | `content:webhook` |
 
-Tantivy-style syntax enables precise queries:
+Lucene query syntax enables precise queries:
 
 | Syntax | Description | Example |
 | --- | --- | --- |

@@ -25,7 +25,7 @@ Use field prefixes to scope to a specific domain or field:
 | `title:` | Search page titles | `title:authentication` |
 | `content:` | Search page body | `content:webhook` |
 
-Write precise queries with Tantivy-style syntax:
+Write precise queries with Lucene query syntax:
 
 | Syntax | Description | Example |
 | --- | --- | --- |
