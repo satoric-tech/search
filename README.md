@@ -25,7 +25,7 @@
 
 ---
 
-Satoric is a full-text web search engine for developer docs, APIs, and technical references from [llms.txt](https://llmstxt.org/) sites. Available as a CLI, SDK, MCP server, and agent skill.
+Satoric is a full-text search engine for developer docs, APIs, and technical references. Available as a CLI, SDK, MCP server, and agent skill.
 
 ## Installation
 
@@ -72,31 +72,108 @@ title:quickstart^2.0 content:authentication site:clerk.com
 
 ## CLI
 
-Search documentation from the command line: `npx @satoric/search search <query> [options]`
+Install once or run with `npx`:
 
 ```bash
-npx @satoric/search search "mcp server setup"
-npx @satoric/search search "site:stripe.com webhook verification" --limit 5
-npx @satoric/search search "redis connection pooling" --limit 10 --offset 3
+npm install -g @satoric/search
+# or
+npx @satoric/search <command>
 ```
 
-Supported flags:
+### Search
 
-| Flag           | Short | Default | Max  | Description                      |
-| -------------- | ----- | ------- | ---- | -------------------------------- |
-| `--limit <n>`  | `-l`  | `10`    | `50` | Max results to return            |
-| `--offset <n>` | `-o`  | `0`     | —    | Results to skip (for pagination) |
+```bash
+satoric search "mcp server setup"
+satoric search "site:stripe.com webhook" --limit 5
+satoric search "redis connection pooling" --collection my-docs
+```
+
+Flags:
+
+| Flag | Short | Default | Description |
+| --- | --- | --- | --- |
+| `--collection <name>` | `-c` | `web` | Collection to search |
+| `--limit <n>` | `-l` | `10` | Max results (max 50) |
+| `--offset <n>` | `-o` | `0` | Pagination offset |
+
+### Collections
+
+```bash
+satoric collections list
+satoric collections describe my-docs
+satoric collections create my-docs \
+  --field title:text:en_stem:snippet \
+  --field content:text:en_stem:snippet \
+  --field site:text:raw
+satoric collections delete my-docs
+```
+
+Field spec format: `name:type[:tokenizer][:options]`
+
+| Part | Values |
+| --- | --- |
+| `type` | `text`, `integer` |
+| `tokenizer` | `default`, `en_stem`, `raw` |
+| options | `snippet`, `fast`, `nostore`, `nosearch` |
+
+### Documents
+
+```bash
+# Upsert from file (JSONL or JSON array)
+satoric documents upsert my-docs --file docs.jsonl
+cat docs.json | satoric documents upsert my-docs
+
+# Fetch a document by id
+satoric documents fetch my-docs --id "https://example.com/page"
+
+# Delete by id or query
+satoric documents delete my-docs --id "https://example.com/page"
+satoric documents delete my-docs --query 'site:"example.com"'
+```
+
+Each document must have an `id` field. Documents with the same `id` are replaced on upsert.
+
+### Environment
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `SATORIC_BASE_URL` | `https://api.satoric.ai` | Backend URL |
+| `SATORIC_COLLECTION` | `web` | Default collection for search |
 
 ## SDK
 
-Import and call `search()` directly from TypeScript or JavaScript.
+Import and call directly from TypeScript or JavaScript.
 
 ```typescript
-import { search } from '@satoric/search';
+import {
+  search,
+  listCollections, getCollection, createCollection, deleteCollection,
+  upsertDocuments, fetchDocument, deleteDocuments,
+} from '@satoric/search';
 
+// Search the default public collection
 const results = await search("mcp server setup");
-const results = await search("site:stripe.com webhook verification", { limit: 5 });
-const results = await search("redis connection pooling", { limit: 10, offset: 3 });
+const results = await search("site:stripe.com webhook", { limit: 5 });
+
+// Search a specific collection
+const results = await search("query", { collection: "my-docs" });
+
+// Manage collections
+await createCollection("my-docs", [
+  { name: "title", type: "text", tokenizer: "en_stem", snippet: true },
+  { name: "content", type: "text", tokenizer: "en_stem", snippet: true },
+  { name: "site", type: "text", tokenizer: "raw" },
+]);
+const collections = await listCollections();
+await deleteCollection("my-docs");
+
+// Manage documents
+await upsertDocuments("my-docs", [
+  { id: "https://example.com/page", title: "Example", content: "..." }
+]);
+const doc = await fetchDocument("my-docs", "https://example.com/page");
+await deleteDocuments("my-docs", { id: "https://example.com/page" });
+await deleteDocuments("my-docs", { query: 'site:"example.com"' });
 ```
 
 ## MCP

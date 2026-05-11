@@ -1,5 +1,5 @@
 import { version } from "./version.js";
-import { DEFAULT_BASE_URL, DEFAULT_LIMIT } from "./constants.js";
+import { DEFAULT_BASE_URL, DEFAULT_COLLECTION, DEFAULT_LIMIT } from "./constants.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
@@ -42,6 +42,10 @@ function buildServer(baseUrl: string): Server {
               description:
                 "Search query. Supports plain queries, field prefixes (site:, title:, content:), Lucene query syntax (quoted phrases, +/-, AND/OR/NOT, grouping, boosting, fuzzy).",
             },
+            collection: {
+              type: "string",
+              description: `Collection to search (default: ${DEFAULT_COLLECTION})`,
+            },
             limit: {
               type: "integer",
               description: "Max results to return (default: 10, max: 50)",
@@ -78,12 +82,17 @@ function buildServer(baseUrl: string): Server {
     }
     const q = rawQ.trim();
 
+    const rawCollection = args?.["collection"];
+    const collection =
+      typeof rawCollection === "string" && rawCollection.trim()
+        ? rawCollection.trim()
+        : DEFAULT_COLLECTION;
     const rawLimit = args?.["limit"];
     const limit = Math.min(50, Math.max(1, Math.floor(Number(rawLimit) || DEFAULT_LIMIT)));
     const rawOffset = args?.["offset"];
     const offset = Math.max(0, Math.floor(Number(rawOffset) || 0));
 
-    const url = new URL(`${baseUrl}/search`);
+    const url = new URL(`${baseUrl}/collections/${encodeURIComponent(collection)}/search`);
     url.searchParams.set("q", q);
     url.searchParams.set("limit", String(limit));
     if (offset > 0) url.searchParams.set("offset", String(offset));
