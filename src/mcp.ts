@@ -1,3 +1,4 @@
+import { Command } from "commander";
 import { version } from "./version.js";
 import { DEFAULT_BASE_URL, DEFAULT_COLLECTION, DEFAULT_LIMIT } from "./constants.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -126,28 +127,8 @@ function buildServer(baseUrl: string): Server {
   return server;
 }
 
-export async function runMcp(argv: string[]): Promise<void> {
+export async function runMcp(transport: string, port: number): Promise<void> {
   const baseUrl = DEFAULT_BASE_URL;
-  let transport = "stdio";
-  let port = 4000;
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--help" || arg === "-h") {
-      process.stdout.write(
-        "Usage: satoric mcp [options]\n\n" +
-          "Options:\n" +
-          "  --transport <mode>     Transport mode: stdio or sse (default: stdio)\n" +
-          "  --port <n>             Port for SSE transport (default: 4000)\n" +
-          "  --help, -h             Show this help\n"
-      );
-      process.exit(0);
-    } else if (arg === "--transport" && argv[i + 1]) {
-      transport = argv[++i];
-    } else if (arg === "--port" && argv[i + 1]) {
-      port = parseInt(argv[++i], 10);
-    }
-  }
 
   if (transport === "sse") {
     const sessions = new Map<string, SSEServerTransport>();
@@ -189,3 +170,11 @@ export async function runMcp(argv: string[]): Promise<void> {
     await buildServer(baseUrl).connect(new StdioServerTransport());
   }
 }
+
+export const mcpCommand = new Command("mcp")
+  .description("Start the MCP server")
+  .option("--transport <mode>", "transport mode: stdio or sse", "stdio")
+  .option("--port <n>", "port for SSE transport", "4000")
+  .action(async (options: { transport: string; port: string }) => {
+    await runMcp(options.transport, parseInt(options.port, 10));
+  });

@@ -1,14 +1,12 @@
-export type FieldType = "text" | "integer";
-export type Tokenizer = "default" | "en_stem" | "raw";
-
 export interface FieldSpec {
   name: string;
-  type: FieldType;
-  tokenizer?: Tokenizer;
-  searchable?: boolean;
-  stored?: boolean;
+  type: string;
+  /** Convenience: true → record: "position" in Quickwit */
   snippet?: boolean;
-  fast?: boolean;
+  /** Convenience: false → indexed: false in Quickwit */
+  searchable?: boolean;
+  /** Any other Quickwit field option passed through verbatim */
+  [key: string]: unknown;
 }
 
 export interface Collection {

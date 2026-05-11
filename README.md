@@ -95,16 +95,20 @@ Flags:
 | `--collection <name>` | `-c` | `web` | Collection to search |
 | `--limit <n>` | `-l` | `10` | Max results (max 50) |
 | `--offset <n>` | `-o` | `0` | Pagination offset |
+| `--snippets <n>` | `-s` | `1` | Highlighted fragments per snippet field (0 to disable) |
+| `--snippet-size <n>` | `-S` | `256` | Characters per fragment |
 
 ### Collections
 
 ```bash
 satoric collections list
-satoric collections describe my-docs
+satoric collections info my-docs
+satoric collections schema my-docs
 satoric collections create my-docs \
-  --field title:text:en_stem:snippet \
+  --field title:text:en_stem \
   --field content:text:en_stem:snippet \
   --field site:text:raw
+satoric collections create my-docs --config my-docs.json
 satoric collections delete my-docs
 ```
 
@@ -114,7 +118,20 @@ Field spec format: `name:type[:tokenizer][:options]`
 | --- | --- |
 | `type` | `text`, `integer` |
 | `tokenizer` | `default`, `en_stem`, `raw` |
-| options | `snippet`, `fast`, `nostore`, `nosearch` |
+| `options` | `snippet`, `fast`, `nostore`, `nosearch` |
+
+A JSON or YAML config file can also define fields:
+
+```json
+{
+  "name": "my-docs",
+  "fields": [
+    { "name": "title", "type": "text", "tokenizer": "en_stem" },
+    { "name": "content", "type": "text", "tokenizer": "en_stem", "snippet": true },
+    { "name": "site", "type": "text", "tokenizer": "raw" }
+  ]
+}
+```
 
 ### Documents
 
@@ -160,7 +177,7 @@ const results = await search("query", { collection: "my-docs" });
 
 // Manage collections
 await createCollection("my-docs", [
-  { name: "title", type: "text", tokenizer: "en_stem", snippet: true },
+  { name: "title", type: "text", tokenizer: "en_stem" },
   { name: "content", type: "text", tokenizer: "en_stem", snippet: true },
   { name: "site", type: "text", tokenizer: "raw" },
 ]);

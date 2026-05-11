@@ -1,0 +1,10 @@
+{
+  "name": "llms-txt",
+  "fields": [
+    { "name": "title", "type": "text", "tokenizer": "en_stem" },
+    { "name": "content", "type": "text", "tokenizer": "en_stem", "snippet": true },
+    { "name": "site", "type": "text", "tokenizer": "raw" },
+    { "name": "site_name", "type": "text", "tokenizer": "raw" },
+    { "name": "rank", "type": "i64", "fast": true }
+  ]
+}

@@ -3,7 +3,6 @@ import { apiRequest } from "./client.js";
 import type { Collection, Document, FieldSpec, SearchResponse, SearchResult } from "./types.js";
 
 export type { Collection, Document, FieldSpec, SearchResult };
-export type { FieldType, Tokenizer } from "./types.js";
 
 export interface SearchOptions {
   collection?: string;

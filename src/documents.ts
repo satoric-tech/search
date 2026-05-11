@@ -1,134 +1,108 @@
-import { readFile } from "fs/promises";
+import { createReadStream } from "fs";
+import { createInterface } from "readline";
+import { Command } from "commander";
 import { DEFAULT_BASE_URL } from "./constants.js";
 import { apiRequest, ApiError } from "./client.js";
 import type { Document } from "./types.js";
 
-async function readDocuments(filePath?: string): Promise<Document[]> {
-  let content: string;
-  if (filePath) {
-    content = await readFile(filePath, "utf-8");
-  } else {
-    const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
-    content = Buffer.concat(chunks).toString("utf-8");
+async function* streamDocuments(filePath?: string): AsyncGenerator<Document> {
+  const input = filePath ? createReadStream(filePath) : process.stdin;
+  const rl = createInterface({ input, crlfDelay: Infinity });
+  const lines: string[] = [];
+  let isArray: boolean | undefined;
+
+  for await (const line of rl) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (isArray === undefined) {
+      isArray = trimmed.startsWith("[");
+    }
+
+    if (isArray) {
+      lines.push(line);
+    } else {
+      yield JSON.parse(trimmed) as Document;
+    }
   }
-  const trimmed = content.trim();
-  if (!trimmed) return [];
-  if (trimmed.startsWith("[")) {
-    return JSON.parse(trimmed) as Document[];
+
+  if (isArray && lines.length > 0) {
+    const docs = JSON.parse(lines.join("\n")) as Document[];
+    for (const doc of docs) yield doc;
   }
-  return trimmed
-    .split("\n")
-    .filter((l) => l.trim())
-    .map((l) => JSON.parse(l) as Document);
 }
 
-export async function runDocuments(argv: string[]): Promise<void> {
-  const baseUrl = process.env["SATORIC_BASE_URL"] ?? DEFAULT_BASE_URL;
-  const [sub, ...rest] = argv;
+const MAX_BATCH_BYTES = 8 * 1024 * 1024;
 
-  if (!sub || sub === "--help" || sub === "-h") {
-    process.stdout.write(
-      "Usage: satoric documents <command> [options]\n\n" +
-        "Commands:\n" +
-        "  upsert <collection>    Insert or replace documents\n" +
-        "  fetch <collection>     Fetch a document by id\n" +
-        "  delete <collection>    Delete documents by id or query\n\n" +
-        "Run satoric documents <command> --help for command options.\n"
-    );
-    return;
-  }
+export const documentsCommand = new Command("documents").description("Manage documents");
 
-  if (sub === "upsert") {
-    let collection: string | undefined;
-    let filePath: string | undefined;
+documentsCommand
+  .command("upsert <collection>")
+  .description("Insert or replace documents from NDJSON or JSON array")
+  .option("-f, --file <path>", "input file (reads from stdin if omitted)")
+  .addHelpText(
+    "after",
+    `
+Examples:
+  python index.py crawl | satoric documents upsert llms-txt
+  satoric documents upsert my-docs --file docs.jsonl`
+  )
+  .action(async (collection: string, options: { file?: string }) => {
+    const baseUrl = DEFAULT_BASE_URL;
+    const url = `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/upsert`;
+    let batch: Document[] = [];
+    let batchBytes = 0;
+    let total = 0;
+    let batches = 0;
 
-    for (let i = 0; i < rest.length; i++) {
-      const arg = rest[i];
-      if (arg === "--help" || arg === "-h") {
-        process.stdout.write(
-          "Usage: satoric documents upsert <collection> [options]\n\n" +
-            "Reads JSONL or a JSON array from --file or stdin. Each document must have an 'id' field.\n\n" +
-            "Options:\n" +
-            "  --file, -f <path>    Input file (JSONL or JSON array). Reads from stdin if omitted.\n\n" +
-            "Examples:\n" +
-            "  satoric documents upsert my-docs --file docs.jsonl\n" +
-            "  cat docs.json | satoric documents upsert my-docs\n"
-        );
-        process.exit(0);
-      } else if (arg === "--file" || arg === "-f") {
-        filePath = rest[++i];
-      } else if (!arg.startsWith("-")) {
-        collection = arg;
-      }
-    }
+    const flush = async () => {
+      if (batch.length === 0) return;
+      await apiRequest<{ upserted: number }>("PUT", url, { documents: batch });
+      total += batch.length;
+      batches++;
+      process.stderr.write(`\rupserted ${total.toLocaleString()} docs (${batches} batches)`);
+      batch = [];
+      batchBytes = 0;
+    };
 
-    if (!collection) {
-      process.stderr.write(
-        "Error: collection name is required\nUsage: satoric documents upsert <collection>\n"
-      );
-      process.exit(1);
-    }
-
-    let documents: Document[];
     try {
-      documents = await readDocuments(filePath);
+      for await (const doc of streamDocuments(options.file)) {
+        const docBytes = Buffer.byteLength(JSON.stringify(doc));
+        if (docBytes > MAX_BATCH_BYTES) {
+          process.stderr.write(
+            `\nwarn: skipping "${doc.id}" (${(docBytes / 1024 / 1024).toFixed(1)}MB exceeds limit)\n`
+          );
+          continue;
+        }
+        if (batch.length > 0 && batchBytes + docBytes > MAX_BATCH_BYTES) await flush();
+        batch.push(doc);
+        batchBytes += docBytes;
+      }
+      await flush();
     } catch (e) {
-      process.stderr.write(`Error reading documents: ${(e as Error).message}\n`);
+      process.stderr.write(`\nError: ${(e as Error).message}\n`);
       process.exit(1);
     }
 
-    if (documents.length === 0) {
+    if (total === 0) {
       process.stderr.write("Error: no documents to upsert\n");
       process.exit(1);
     }
 
-    try {
-      const result = await apiRequest<{ upserted: number }>(
-        "PUT",
-        `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/upsert`,
-        { documents }
-      );
-      process.stdout.write(`Upserted ${result.upserted} document(s).\n`);
-    } catch (e) {
-      process.stderr.write(`Error: ${(e as Error).message}\n`);
-      process.exit(1);
-    }
-    return;
-  }
+    process.stderr.write(`\nDone. ${total.toLocaleString()} documents upserted.\n`);
+  });
 
-  if (sub === "fetch") {
-    let collection: string | undefined;
-    let id: string | undefined;
-
-    for (let i = 0; i < rest.length; i++) {
-      const arg = rest[i];
-      if (arg === "--help" || arg === "-h") {
-        process.stdout.write(
-          "Usage: satoric documents fetch <collection> --id <id>\n\n" +
-            "Options:\n" +
-            "  --id <id>    Document id to fetch\n"
-        );
-        process.exit(0);
-      } else if (arg === "--id") {
-        id = rest[++i];
-      } else if (!arg.startsWith("-")) {
-        collection = arg;
-      }
-    }
-
-    if (!collection || !id) {
-      process.stderr.write(
-        "Error: collection and --id are required\nUsage: satoric documents fetch <collection> --id <id>\n"
-      );
-      process.exit(1);
-    }
-
+documentsCommand
+  .command("fetch <collection>")
+  .description("Fetch a document by id")
+  .requiredOption("--id <id>", "document id")
+  .action(async (collection: string, options: { id: string }) => {
+    const baseUrl = DEFAULT_BASE_URL;
     try {
       const url = new URL(
         `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/fetch`
       );
-      url.searchParams.set("id", id);
+      url.searchParams.set("id", options.id);
       const doc = await apiRequest<Document>("GET", url.toString());
       process.stdout.write(JSON.stringify(doc, null, 2) + "\n");
     } catch (e) {
@@ -139,50 +113,27 @@ export async function runDocuments(argv: string[]): Promise<void> {
       }
       process.exit(1);
     }
-    return;
-  }
+  });
 
-  if (sub === "delete") {
-    let collection: string | undefined;
-    let id: string | undefined;
-    let query: string | undefined;
-
-    for (let i = 0; i < rest.length; i++) {
-      const arg = rest[i];
-      if (arg === "--help" || arg === "-h") {
-        process.stdout.write(
-          "Usage: satoric documents delete <collection> (--id <id> | --query <query>)\n\n" +
-            "Options:\n" +
-            "  --id <id>          Delete a document by id\n" +
-            "  --query, -q <q>    Delete all documents matching a query\n\n" +
-            "Examples:\n" +
-            '  satoric documents delete my-docs --id "https://example.com/page"\n' +
-            "  satoric documents delete my-docs --query 'site:\"example.com\"'\n"
-        );
-        process.exit(0);
-      } else if (arg === "--id") {
-        id = rest[++i];
-      } else if (arg === "--query" || arg === "-q") {
-        query = rest[++i];
-      } else if (!arg.startsWith("-")) {
-        collection = arg;
-      }
-    }
-
-    if (!collection) {
-      process.stderr.write(
-        "Error: collection name is required\nUsage: satoric documents delete <collection>\n"
-      );
-      process.exit(1);
-    }
-
-    if (!id && !query) {
+documentsCommand
+  .command("delete <collection>")
+  .description("Delete documents by id or query")
+  .option("--id <id>", "delete a document by id")
+  .option("-q, --query <query>", "delete all documents matching a query")
+  .addHelpText(
+    "after",
+    `
+Examples:
+  satoric documents delete my-docs --id "https://example.com/page"
+  satoric documents delete my-docs --query 'site:"example.com"'`
+  )
+  .action(async (collection: string, options: { id?: string; query?: string }) => {
+    const baseUrl = DEFAULT_BASE_URL;
+    if (!options.id && !options.query) {
       process.stderr.write("Error: --id or --query is required\n");
       process.exit(1);
     }
-
-    const body = id ? { id } : { query };
-
+    const body = options.id ? { id: options.id } : { query: options.query };
     try {
       await apiRequest(
         "POST",
@@ -194,9 +145,4 @@ export async function runDocuments(argv: string[]): Promise<void> {
       process.stderr.write(`Error: ${(e as Error).message}\n`);
       process.exit(1);
     }
-    return;
-  }
-
-  process.stderr.write(`Unknown command: ${sub}\n\nRun satoric documents --help for usage.\n`);
-  process.exit(1);
-}
+  });

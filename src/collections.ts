@@ -1,15 +1,18 @@
+import { readFileSync } from "fs";
+import { Command } from "commander";
+import { load as parseYaml } from "js-yaml";
 import { DEFAULT_BASE_URL } from "./constants.js";
 import { apiRequest, ApiError } from "./client.js";
-import type { Collection, FieldSpec, FieldType, Tokenizer } from "./types.js";
+import type { Collection, FieldSpec } from "./types.js";
 
 function parseFieldSpec(spec: string): FieldSpec {
   const parts = spec.split(":");
   const name = parts[0]?.trim();
-  const type = parts[1]?.trim() as FieldType;
+  const type = parts[1]?.trim();
 
-  if (!name || !type || !["text", "integer"].includes(type)) {
+  if (!name || !type) {
     throw new Error(
-      `Invalid field spec: "${spec}"\nFormat: name:type[:tokenizer][:options]\nTypes: text, integer\nTokenizers: default, en_stem, raw\nOptions: snippet, fast, nostore, nosearch`
+      `Invalid field spec: "${spec}"\nFormat: name:type[:tokenizer][:options]\nOptions: snippet, fast, nostore, nosearch`
     );
   }
 
@@ -21,48 +24,86 @@ function parseFieldSpec(spec: string): FieldSpec {
     else if (p === "fast") fieldSpec.fast = true;
     else if (p === "nostore") fieldSpec.stored = false;
     else if (p === "nosearch") fieldSpec.searchable = false;
-    else if (["default", "en_stem", "raw"].includes(p)) fieldSpec.tokenizer = p as Tokenizer;
-    else throw new Error(`Unknown field option: "${p}" in "${spec}"`);
+    else fieldSpec.tokenizer = p;
   }
 
   return fieldSpec;
 }
 
-export async function runCollections(argv: string[]): Promise<void> {
-  const baseUrl = process.env["SATORIC_BASE_URL"] ?? DEFAULT_BASE_URL;
-  const [sub, ...rest] = argv;
-
-  if (!sub || sub === "--help" || sub === "-h") {
-    process.stdout.write(
-      "Usage: satoric collections <command> [options]\n\n" +
-        "Commands:\n" +
-        "  list                   List all collections\n" +
-        "  create <name>          Create a collection\n" +
-        "  describe <name>        Show a collection's schema\n" +
-        "  delete <name>          Delete a collection\n\n" +
-        "Run satoric collections <command> --help for command options.\n"
-    );
-    return;
+function loadConfig(filePath: string): { name?: string; fields: FieldSpec[] } {
+  const raw = readFileSync(filePath, "utf8");
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  let parsed: unknown;
+  if (ext === "yaml" || ext === "yml") {
+    parsed = parseYaml(raw);
+  } else {
+    parsed = JSON.parse(raw);
   }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !Array.isArray((parsed as Record<string, unknown>).fields)
+  ) {
+    throw new Error(`Config must have a "fields" array`);
+  }
+  return parsed as { name?: string; fields: FieldSpec[] };
+}
 
-  if (sub === "list") {
+export const collectionsCommand = new Command("collections").description("Manage collections");
+
+collectionsCommand
+  .command("list")
+  .description("Print collection names")
+  .action(async () => {
+    const baseUrl = DEFAULT_BASE_URL;
     try {
       const collections = await apiRequest<Collection[]>("GET", `${baseUrl}/collections`);
-      process.stdout.write(JSON.stringify(collections, null, 2) + "\n");
+      if (collections.length === 0) {
+        process.stdout.write("No collections.\n");
+      } else {
+        process.stdout.write(collections.map((c) => c.name).join("\n") + "\n");
+      }
     } catch (e) {
       process.stderr.write(`Error: ${(e as Error).message}\n`);
       process.exit(1);
     }
-    return;
-  }
+  });
 
-  if (sub === "describe") {
-    const [name] = rest;
-    if (!name || name === "--help" || name === "-h") {
-      process.stdout.write("Usage: satoric collections describe <name>\n");
-      if (!name) process.exit(1);
-      return;
+collectionsCommand
+  .command("info <name>")
+  .description("Show doc count, size, created, and fields")
+  .action(async (name: string) => {
+    const baseUrl = DEFAULT_BASE_URL;
+    try {
+      const info = await apiRequest<{
+        name: string;
+        num_docs: number;
+        size_in_bytes: number;
+        created_at: number;
+        fields: { name: string }[];
+      }>("GET", `${baseUrl}/collections/${encodeURIComponent(name)}/info`);
+      const size =
+        info.size_in_bytes > 1_000_000
+          ? `${(info.size_in_bytes / 1_000_000).toFixed(1)} MB`
+          : `${(info.size_in_bytes / 1_000).toFixed(1)} KB`;
+      process.stdout.write(
+        `name:       ${info.name}\n` +
+          `docs:       ${info.num_docs.toLocaleString()}\n` +
+          `size:       ${size}\n` +
+          `created:    ${new Date(info.created_at * 1000).toISOString()}\n` +
+          `fields:     id, indexed_at, ${info.fields.map((f) => f.name).join(", ")}\n`
+      );
+    } catch (e) {
+      process.stderr.write(`Error: ${(e as Error).message}\n`);
+      process.exit(1);
     }
+  });
+
+collectionsCommand
+  .command("schema <name>")
+  .description("Show full schema as JSON")
+  .action(async (name: string) => {
+    const baseUrl = DEFAULT_BASE_URL;
     try {
       const collection = await apiRequest<Collection>(
         "GET",
@@ -73,52 +114,59 @@ export async function runCollections(argv: string[]): Promise<void> {
       process.stderr.write(`Error: ${(e as Error).message}\n`);
       process.exit(1);
     }
-    return;
-  }
+  });
 
-  if (sub === "create") {
+collectionsCommand
+  .command("create [name]")
+  .description("Create a collection")
+  .option("-C, --config <file>", "load fields from a JSON or YAML file")
+  .option(
+    "-f, --field <spec>",
+    "add a field: name:type[:tokenizer][:options] (repeatable)",
+    (v: string, acc: string[]) => [...acc, v],
+    [] as string[]
+  )
+  .addHelpText(
+    "after",
+    `
+Types:      text, integer
+Tokenizers: default, en_stem, raw
+Options:    snippet, fast, nostore, nosearch
+
+Examples:
+  satoric collections create --config llms-txt.json
+  satoric collections create docs \\
+    --field title:text:en_stem \\
+    --field content:text:en_stem:snippet \\
+    --field site:text:raw`
+  )
+  .action(async (nameArg: string | undefined, options: { config?: string; field: string[] }) => {
+    const baseUrl = DEFAULT_BASE_URL;
     const fields: FieldSpec[] = [];
-    let name: string | undefined;
+    let name = nameArg;
 
-    for (let i = 0; i < rest.length; i++) {
-      const arg = rest[i];
-      if (arg === "--help" || arg === "-h") {
-        process.stdout.write(
-          "Usage: satoric collections create <name> [options]\n\n" +
-            "Options:\n" +
-            "  --field, -f <spec>    Add a field. Format: name:type[:tokenizer][:options]\n" +
-            "                        Types: text, integer\n" +
-            "                        Tokenizers: default, en_stem, raw\n" +
-            "                        Options: snippet, fast, nostore, nosearch\n\n" +
-            "Examples:\n" +
-            "  satoric collections create docs \\\n" +
-            "    --field title:text:en_stem:snippet \\\n" +
-            "    --field content:text:en_stem:snippet \\\n" +
-            "    --field site:text:raw\n" +
-            "  satoric collections create metrics --field name:text:raw --field value:integer:fast\n"
-        );
-        process.exit(0);
-      } else if (arg === "--field" || arg === "-f") {
-        const spec = rest[++i];
-        if (!spec) {
-          process.stderr.write("Error: --field requires a value\n");
-          process.exit(1);
-        }
-        try {
-          fields.push(parseFieldSpec(spec));
-        } catch (e) {
-          process.stderr.write(`Error: ${(e as Error).message}\n`);
-          process.exit(1);
-        }
-      } else if (!arg.startsWith("-")) {
-        name = arg;
+    if (options.config) {
+      try {
+        const config = loadConfig(options.config);
+        if (config.name) name ??= config.name;
+        fields.push(...config.fields);
+      } catch (e) {
+        process.stderr.write(`Error loading config: ${(e as Error).message}\n`);
+        process.exit(1);
+      }
+    }
+
+    for (const spec of options.field) {
+      try {
+        fields.push(parseFieldSpec(spec));
+      } catch (e) {
+        process.stderr.write(`Error: ${(e as Error).message}\n`);
+        process.exit(1);
       }
     }
 
     if (!name) {
-      process.stderr.write(
-        "Error: collection name is required\nUsage: satoric collections create <name>\n"
-      );
+      process.stderr.write("Error: collection name is required\n");
       process.exit(1);
     }
 
@@ -133,16 +181,13 @@ export async function runCollections(argv: string[]): Promise<void> {
       }
       process.exit(1);
     }
-    return;
-  }
+  });
 
-  if (sub === "delete") {
-    const [name] = rest;
-    if (!name || name === "--help" || name === "-h") {
-      process.stdout.write("Usage: satoric collections delete <name>\n");
-      if (!name) process.exit(1);
-      return;
-    }
+collectionsCommand
+  .command("delete <name>")
+  .description("Delete a collection")
+  .action(async (name: string) => {
+    const baseUrl = DEFAULT_BASE_URL;
     try {
       await apiRequest("DELETE", `${baseUrl}/collections/${encodeURIComponent(name)}`);
       process.stdout.write(`Collection '${name}' deleted.\n`);
@@ -150,9 +195,4 @@ export async function runCollections(argv: string[]): Promise<void> {
       process.stderr.write(`Error: ${(e as Error).message}\n`);
       process.exit(1);
     }
-    return;
-  }
-
-  process.stderr.write(`Unknown command: ${sub}\n\nRun satoric collections --help for usage.\n`);
-  process.exit(1);
-}
+  });
