@@ -3,8 +3,7 @@ import { Command } from "commander";
 import { version } from "./version.js";
 import { searchCommand } from "./search.js";
 import { collectionsCommand } from "./collections.js";
-import { documentsCommand } from "./documents.js";
-import { fetchCommand } from "./fetch.js";
+import { upsertCommand, fetchCommand, deleteCommand } from "./documents.js";
 import { mcpCommand } from "./mcp.js";
 
 const program = new Command("satoric")
@@ -15,12 +14,14 @@ const program = new Command("satoric")
     `
 Environment:
   SATORIC_BASE_URL      Backend URL (default: https://api.satoric.ai)
-  SATORIC_COLLECTION    Default collection for search (default: web)`
+  SATORIC_API_KEY       API key for write operations
+  SATORIC_COLLECTION    Default collection for search (default: llms-txt)`
   )
   .addCommand(searchCommand)
-  .addCommand(collectionsCommand)
-  .addCommand(documentsCommand)
+  .addCommand(upsertCommand)
   .addCommand(fetchCommand)
+  .addCommand(deleteCommand)
+  .addCommand(collectionsCommand)
   .addCommand(mcpCommand);
 
 await program.parseAsync();

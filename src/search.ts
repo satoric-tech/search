@@ -2,7 +2,6 @@ import { Command } from "commander";
 import { version } from "./version.js";
 import {
   DEFAULT_BASE_URL,
-  DEFAULT_COLLECTION,
   DEFAULT_LIMIT,
   DEFAULT_SNIPPETS,
   DEFAULT_SNIPPET_SIZE,
@@ -11,9 +10,9 @@ import {
 export const searchCommand = new Command("search")
   .description("Search a collection")
   .argument("<query...>", "search query (Lucene syntax supported)")
-  .option("-c, --collection <name>", "collection to search", DEFAULT_COLLECTION)
+  .option("-c, --collection <name>", "collection to search (default: $SATORIC_COLLECTION)")
   .option("-l, --limit <n>", "max results", String(DEFAULT_LIMIT))
-  .option("-o, --offset <n>", "results to skip", "0")
+  .option("-p, --page <n>", "page number (1-indexed)", "1")
   .option(
     "-s, --snippets <n>",
     "snippets per snippet field (0 to disable)",
@@ -22,14 +21,21 @@ export const searchCommand = new Command("search")
   .option("-S, --snippet-size <n>", "characters per snippet", String(DEFAULT_SNIPPET_SIZE))
   .action(async (queryParts: string[], options: Record<string, string>) => {
     const baseUrl = DEFAULT_BASE_URL;
+    const collection = options["collection"] ?? process.env.SATORIC_COLLECTION;
+    if (!collection) {
+      process.stderr.write("Error: --collection is required (or set SATORIC_COLLECTION)\n");
+      process.exit(1);
+    }
     const query = queryParts.join(" ").trim();
     const url = new URL(
-      `${baseUrl}/collections/${encodeURIComponent(options["collection"]!)}/search`
+      `${baseUrl}/collections/${encodeURIComponent(collection)}/search`
     );
     url.searchParams.set("q", query);
     url.searchParams.set("limit", options["limit"]!);
     url.searchParams.set("snippets", options["snippets"]!);
-    if (parseInt(options["offset"]!, 10) > 0) url.searchParams.set("offset", options["offset"]!);
+    const page = Math.max(1, parseInt(options["page"]!, 10));
+    const offset = (page - 1) * parseInt(options["limit"]!, 10);
+    if (offset > 0) url.searchParams.set("offset", String(offset));
     if (options["snippetSize"] !== String(DEFAULT_SNIPPET_SIZE))
       url.searchParams.set("snippet_size", options["snippetSize"]!);
 

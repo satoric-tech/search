@@ -34,9 +34,6 @@ async function* streamDocuments(filePath?: string): AsyncGenerator<Document> {
   }
 }
 
-export const documentsCommand = new Command("documents").alias("docs").description("Manage documents");
-
-const BATCH_BYTES = 5 * 1024 * 1024;
 const SPINNER = {
   interval: 80,
   frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"].map(
@@ -44,20 +41,24 @@ const SPINNER = {
   ),
 };
 
-documentsCommand
-  .command("upsert <collection>")
+export const upsertCommand = new Command("upsert")
   .description("Insert or replace documents from NDJSON or JSON array")
+  .option("-c, --collection <name>", "collection to upsert into (default: $SATORIC_COLLECTION)")
   .option("-f, --file <path>", "input file (reads from stdin if omitted)")
   .option("--clean", "delete all existing documents before upserting")
   .addHelpText(
     "after",
     `
 Examples:
-  python index.py crawl | satoric docs upsert llms-txt
-  satoric docs upsert my-docs --file docs.ndjson --clean
-  python index.py crawl | satoric docs upsert llms-txt --clean`
+  python index.py crawl | satoric upsert --collection llms-txt
+  satoric upsert --collection my-docs --file docs.ndjson --clean`
   )
-  .action(async (collection: string, options: { file?: string; clean?: boolean }) => {
+  .action(async (options: { collection?: string; file?: string; clean?: boolean }) => {
+    const collection = options.collection ?? process.env.SATORIC_COLLECTION;
+    if (!collection) {
+      process.stderr.write("Error: --collection is required (or set SATORIC_COLLECTION)\n");
+      process.exit(1);
+    }
     const baseUrl = DEFAULT_BASE_URL;
     const url = `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/upsert`;
     const apiKey = process.env.SATORIC_API_KEY;
@@ -152,11 +153,16 @@ Examples:
     }
   });
 
-documentsCommand
-  .command("fetch <collection>")
+export const fetchCommand = new Command("fetch")
   .description("Fetch a document by id")
-  .requiredOption("--id <id>", "document id")
-  .action(async (collection: string, options: { id: string }) => {
+  .option("-c, --collection <name>", "collection to fetch from (default: $SATORIC_COLLECTION)")
+  .requiredOption("--id <id>", "document id (URL)")
+  .action(async (options: { collection?: string; id: string }) => {
+    const collection = options.collection ?? process.env.SATORIC_COLLECTION;
+    if (!collection) {
+      process.stderr.write("Error: --collection is required (or set SATORIC_COLLECTION)\n");
+      process.exit(1);
+    }
     const baseUrl = DEFAULT_BASE_URL;
     try {
       const url = new URL(
@@ -175,19 +181,24 @@ documentsCommand
     }
   });
 
-documentsCommand
-  .command("delete <collection>")
+export const deleteCommand = new Command("delete")
   .description("Delete documents by id or query")
+  .option("-c, --collection <name>", "collection to delete from (default: $SATORIC_COLLECTION)")
   .option("--id <id>", "delete a document by id")
   .option("-q, --query <query>", "delete all documents matching a query")
   .addHelpText(
     "after",
     `
 Examples:
-  satoric documents delete my-docs --id "https://example.com/page"
-  satoric documents delete my-docs --query 'site:"example.com"'`
+  satoric delete --collection my-docs --id "https://example.com/page"
+  satoric delete --collection my-docs --query 'site:example.com'`
   )
-  .action(async (collection: string, options: { id?: string; query?: string }) => {
+  .action(async (options: { collection?: string; id?: string; query?: string }) => {
+    const collection = options.collection ?? process.env.SATORIC_COLLECTION;
+    if (!collection) {
+      process.stderr.write("Error: --collection is required (or set SATORIC_COLLECTION)\n");
+      process.exit(1);
+    }
     const baseUrl = DEFAULT_BASE_URL;
     if (!options.id && !options.query) {
       process.stderr.write("Error: --id or --query is required\n");

@@ -50,8 +50,29 @@ collectionsCommand
   });
 
 collectionsCommand
-  .command("info <name>")
-  .description("Show doc count, size, created, and fields")
+  .command("describe <name>")
+  .description("Show collection config as JSON")
+  .action(async (name: string) => {
+    const baseUrl = DEFAULT_BASE_URL;
+    try {
+      const collection = await apiRequest<Collection>(
+        "GET",
+        `${baseUrl}/collections/${encodeURIComponent(name)}`
+      );
+      const config: CollectionConfig = {
+        name: collection.name,
+        mappings: collection.mappings as Record<string, unknown>,
+      };
+      process.stdout.write(JSON.stringify(config, null, 2) + "\n");
+    } catch (e) {
+      process.stderr.write(`Error: ${(e as Error).message}\n`);
+      process.exit(1);
+    }
+  });
+
+collectionsCommand
+  .command("stats <name>")
+  .description("Show doc count, size, and created date")
   .action(async (name: string) => {
     const baseUrl = DEFAULT_BASE_URL;
     try {
@@ -72,44 +93,6 @@ collectionsCommand
           `created:    ${new Date(info.created_at * 1000).toISOString()}\n` +
           `fields:     ${Object.keys(properties).join(", ")}\n`
       );
-    } catch (e) {
-      process.stderr.write(`Error: ${(e as Error).message}\n`);
-      process.exit(1);
-    }
-  });
-
-collectionsCommand
-  .command("config <name>")
-  .description("Download collection config as JSON")
-  .action(async (name: string) => {
-    const baseUrl = DEFAULT_BASE_URL;
-    try {
-      const collection = await apiRequest<Collection>(
-        "GET",
-        `${baseUrl}/collections/${encodeURIComponent(name)}`
-      );
-      const config: CollectionConfig = {
-        name: collection.name,
-        mappings: collection.mappings as Record<string, unknown>,
-      };
-      process.stdout.write(JSON.stringify(config, null, 2) + "\n");
-    } catch (e) {
-      process.stderr.write(`Error: ${(e as Error).message}\n`);
-      process.exit(1);
-    }
-  });
-
-collectionsCommand
-  .command("schema <name>")
-  .description("Show full OpenSearch mapping as JSON")
-  .action(async (name: string) => {
-    const baseUrl = DEFAULT_BASE_URL;
-    try {
-      const collection = await apiRequest<Collection>(
-        "GET",
-        `${baseUrl}/collections/${encodeURIComponent(name)}`
-      );
-      process.stdout.write(JSON.stringify(collection, null, 2) + "\n");
     } catch (e) {
       process.stderr.write(`Error: ${(e as Error).message}\n`);
       process.exit(1);
@@ -160,7 +143,7 @@ collectionsCommand
   });
 
 collectionsCommand
-  .command("update <name>")
+  .command("configure <name>")
   .description("Update search config for an existing collection")
   .option("-C, --config <file>", "path to JSON or YAML config file")
   .action(async (name: string, options: { config?: string }) => {
@@ -183,10 +166,8 @@ collectionsCommand
 
     try {
       const meta = (config.mappings._meta ?? {}) as Record<string, unknown>;
-      await apiRequest("PATCH", `${baseUrl}/collections/${encodeURIComponent(name)}`, {
-        meta,
-      });
-      process.stdout.write(`Collection '${name}' updated.\n`);
+      await apiRequest("PATCH", `${baseUrl}/collections/${encodeURIComponent(name)}`, { meta });
+      process.stdout.write(`Collection '${name}' configured.\n`);
     } catch (e) {
       process.stderr.write(`Error: ${(e as Error).message}\n`);
       process.exit(1);
