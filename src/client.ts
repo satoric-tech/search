@@ -15,12 +15,14 @@ const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
 const ABORT_STATUSES = new Set([400, 401, 403, 404, 413]);
 
 export async function apiRequest<T>(method: string, url: string, body?: unknown): Promise<T> {
+  const apiKey = process.env.SATORIC_API_KEY;
   return pRetry(
     async () => {
       const res = await fetch(url, {
         method,
         headers: {
           "User-Agent": `satoric/${version}`,
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

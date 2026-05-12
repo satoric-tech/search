@@ -47,7 +47,7 @@ export const searchCommand = new Command("search")
         process.stderr.write("Error: unexpected response format from server\n");
         process.exit(1);
       }
-      process.stdout.write(JSON.stringify(raw["results"], null, 2) + "\n");
+      process.stdout.write(JSON.stringify(raw, null, 2) + "\n");
     } catch (e) {
       process.stderr.write(`Error: ${(e as Error).message}\n`);
       process.exit(1);

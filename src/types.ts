@@ -1,24 +1,17 @@
-export interface FieldSpec {
-  name: string;
-  type: string;
-  /** Convenience: true → record: "position" in Quickwit */
-  snippet?: boolean;
-  /** Convenience: false → indexed: false in Quickwit */
-  searchable?: boolean;
-  /** Any other Quickwit field option passed through verbatim */
-  [key: string]: unknown;
-}
-
 export interface Collection {
   name: string;
-  fields: FieldSpec[];
+  mappings: Record<string, unknown>;
+}
+
+export interface CollectionInfo {
+  name: string;
+  num_docs: number;
+  size_in_bytes: number;
+  created_at: number;
+  mappings: Record<string, unknown>;
 }
 
 export interface SearchResult {
-  id: string;
-  title?: string;
-  description?: string;
-  snippet?: string;
   [key: string]: unknown;
 }
 
@@ -30,6 +23,5 @@ export interface SearchResponse {
 }
 
 export interface Document {
-  id: string;
   [key: string]: unknown;
 }

@@ -1,8 +1,8 @@
 import { DEFAULT_BASE_URL, DEFAULT_COLLECTION, DEFAULT_LIMIT } from "./constants.js";
 import { apiRequest } from "./client.js";
-import type { Collection, Document, FieldSpec, SearchResponse, SearchResult } from "./types.js";
+import type { Collection, Document, SearchResponse, SearchResult } from "./types.js";
 
-export type { Collection, Document, FieldSpec, SearchResult };
+export type { Collection, Document, SearchResult, SearchResponse };
 
 export interface SearchOptions {
   collection?: string;
@@ -12,7 +12,7 @@ export interface SearchOptions {
   baseUrl?: string;
 }
 
-export async function search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
+export async function search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
   const {
     collection = DEFAULT_COLLECTION,
     limit = DEFAULT_LIMIT,
@@ -25,8 +25,7 @@ export async function search(query: string, options: SearchOptions = {}): Promis
   url.searchParams.set("limit", String(limit));
   if (offset > 0) url.searchParams.set("offset", String(offset));
 
-  const data = await apiRequest<SearchResponse>("GET", url.toString());
-  return data.results;
+  return apiRequest<SearchResponse>("GET", url.toString());
 }
 
 export async function listCollections(baseUrl = DEFAULT_BASE_URL): Promise<Collection[]> {
@@ -39,10 +38,18 @@ export async function getCollection(name: string, baseUrl = DEFAULT_BASE_URL): P
 
 export async function createCollection(
   name: string,
-  fields: FieldSpec[],
+  mappings: Record<string, unknown>,
   baseUrl = DEFAULT_BASE_URL
 ): Promise<void> {
-  await apiRequest("PUT", `${baseUrl}/collections/${encodeURIComponent(name)}`, { fields });
+  await apiRequest("PUT", `${baseUrl}/collections/${encodeURIComponent(name)}`, { mappings });
+}
+
+export async function updateCollectionMeta(
+  name: string,
+  meta: Record<string, unknown>,
+  baseUrl = DEFAULT_BASE_URL
+): Promise<void> {
+  await apiRequest("PATCH", `${baseUrl}/collections/${encodeURIComponent(name)}`, { meta });
 }
 
 export async function deleteCollection(name: string, baseUrl = DEFAULT_BASE_URL): Promise<void> {
