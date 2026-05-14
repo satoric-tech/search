@@ -2,7 +2,7 @@ import { createReadStream } from "fs";
 import { createInterface } from "readline";
 import { Command } from "commander";
 import ora from "ora";
-import { DEFAULT_BASE_URL } from "./constants.js";
+import { DEFAULT_BASE_URL, DEFAULT_INGEST_URL } from "./constants.js";
 import { apiRequest } from "./client.js";
 import { version } from "./version.js";
 import type { Document } from "./types.js";
@@ -16,11 +16,7 @@ async function* streamDocuments(filePath?: string): AsyncGenerator<Document> {
   for await (const line of rl) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-
-    if (isArray === undefined) {
-      isArray = trimmed.startsWith("[");
-    }
-
+    if (isArray === undefined) isArray = trimmed.startsWith("[");
     if (isArray) {
       lines.push(line);
     } else {
@@ -52,9 +48,9 @@ function requireApiKey(options: { apiKey?: string }): string {
 
 export const upsertCommand = new Command("upsert")
   .description("Insert or replace documents from NDJSON or JSON array")
+  .option("-f, --file <path>", "input file (reads from stdin if omitted)")
   .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
   .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
-  .option("-f, --file <path>", "input file (reads from stdin if omitted)")
   .addHelpText(
     "after",
     `
@@ -70,8 +66,6 @@ Examples:
       process.exit(1);
     }
     const apiKey = requireApiKey(options);
-    const url = `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(index)}/documents/upsert`;
-
     const start = Date.now();
     let docs = 0;
     let skipped = 0;
@@ -84,7 +78,7 @@ Examples:
 
     const spinner = ora({ stream: process.stderr, spinner: SPINNER }).start();
 
-    const { readable, writable } = new TransformStream<Uint8Array>();
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
 
@@ -110,6 +104,7 @@ Examples:
     })();
 
     try {
+      const url = `${DEFAULT_INGEST_URL}/indexes/${encodeURIComponent(index)}/documents/upsert`;
       const res = await fetch(url, {
         method: "PUT",
         headers: {
@@ -119,7 +114,7 @@ Examples:
         },
         body: readable,
         duplex: "half",
-      });
+      } as RequestInit);
 
       if (!res.ok) {
         const err = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -144,10 +139,10 @@ Examples:
 
 export const deleteCommand = new Command("delete")
   .description("Delete documents by id or query")
-  .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
-  .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
   .option("--id <id>", "delete a document by id")
   .option("-q, --query <query>", "delete all documents matching a query")
+  .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
+  .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
   .addHelpText(
     "after",
     `
@@ -155,30 +150,28 @@ Examples:
   satoric index doc delete --id "https://example.com/page"
   satoric index doc delete -n my-docs --query 'site:example.com'`
   )
-  .action(
-    async (options: { name?: string; apiKey?: string; id?: string; query?: string }) => {
-      const index = options.name ?? process.env.SATORIC_INDEX;
-      if (!index) {
-        process.stderr.write("Error: -n/--name is required (or set SATORIC_INDEX)\n");
-        process.exit(1);
-      }
-      const apiKey = requireApiKey(options);
-      if (!options.id && !options.query) {
-        process.stderr.write("Error: --id or --query is required\n");
-        process.exit(1);
-      }
-      const body = options.id ? { id: options.id } : { query: options.query };
-      try {
-        await apiRequest(
-          "POST",
-          `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(index)}/documents/delete`,
-          body,
-          apiKey
-        );
-        process.stdout.write("Deleted.\n");
-      } catch (e) {
-        process.stderr.write(`Error: ${(e as Error).message}\n`);
-        process.exit(1);
-      }
+  .action(async (options: { name?: string; apiKey?: string; id?: string; query?: string }) => {
+    const index = options.name ?? process.env.SATORIC_INDEX;
+    if (!index) {
+      process.stderr.write("Error: -n/--name is required (or set SATORIC_INDEX)\n");
+      process.exit(1);
     }
-  );
+    const apiKey = requireApiKey(options);
+    if (!options.id && !options.query) {
+      process.stderr.write("Error: --id or --query is required\n");
+      process.exit(1);
+    }
+    const body = options.id ? { id: options.id } : { query: options.query };
+    try {
+      await apiRequest(
+        "POST",
+        `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(index)}/documents/delete`,
+        body,
+        apiKey
+      );
+      process.stdout.write("Deleted.\n");
+    } catch (e) {
+      process.stderr.write(`Error: ${(e as Error).message}\n`);
+      process.exit(1);
+    }
+  });
