@@ -17,14 +17,18 @@ interface IndexConfig {
 interface SnippetHint {
   field: string;
   size?: number;
-  count?: number;
+}
+
+interface ReturnField {
+  field: string;
+  max_len?: number;
 }
 
 interface Hints {
   id?: string;
-  search?: string[];
-  filter?: string[];
-  snippet?: SnippetHint;
+  language?: string;
+  snippet?: SnippetHint[];
+  return_fields?: ReturnField[];
   boost_script?: string;
 }
 
@@ -47,27 +51,35 @@ function loadConfig(filePath: string): IndexConfig {
   return parsed as IndexConfig;
 }
 
-function parseSnippet(s: string): SnippetHint {
-  const parts = s.split(":");
-  return {
-    field: parts[0],
-    size: parts[1] ? parseInt(parts[1]) : undefined,
-    count: parts[2] ? parseInt(parts[2]) : undefined,
-  };
-}
-
-function parseFields(s: string): string[] {
+function parseSnippetParam(s: string): SnippetHint[] {
   return s
     .split(",")
-    .map((f) => f.trim())
-    .filter(Boolean);
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const [field, sizeStr] = part.split(":");
+      const size = sizeStr ? parseInt(sizeStr) : undefined;
+      return { field: field.trim(), ...(size !== undefined ? { size } : {}) };
+    });
 }
 
-function buildHints(options: {
+function parseReturnParam(s: string): ReturnField[] {
+  return s
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const [field, maxLenStr] = part.split(":");
+      const max_len = maxLenStr ? parseInt(maxLenStr) : undefined;
+      return { field: field.trim(), ...(max_len !== undefined ? { max_len } : {}) };
+    });
+}
+
+function buildCreateHints(options: {
   id?: string;
-  search?: string;
-  filter?: string;
+  language?: string;
   snippet?: string;
+  return?: string;
   boost?: string;
 }): Hints | undefined {
   const hints: Hints = {};
@@ -77,16 +89,16 @@ function buildHints(options: {
     hints.id = options.id;
     hasHints = true;
   }
-  if (options.search) {
-    hints.search = parseFields(options.search);
-    hasHints = true;
-  }
-  if (options.filter) {
-    hints.filter = parseFields(options.filter);
+  if (options.language) {
+    hints.language = options.language;
     hasHints = true;
   }
   if (options.snippet) {
-    hints.snippet = parseSnippet(options.snippet);
+    hints.snippet = parseSnippetParam(options.snippet);
+    hasHints = true;
+  }
+  if (options.return) {
+    hints.return_fields = parseReturnParam(options.return);
     hasHints = true;
   }
   if (options.boost) {
@@ -97,13 +109,28 @@ function buildHints(options: {
   return hasHints ? hints : undefined;
 }
 
-function addHintOptions(cmd: Command): Command {
-  return cmd
-    .option("--id <field>", "field used as document ID")
-    .option("-s, --search <fields>", "searchable text fields, e.g. title^2,body")
-    .option("-f, --filter <fields>", "keyword fields for exact-match filtering, e.g. site,rank")
-    .option("-n, --snippet <spec>", "snippet field and options, e.g. body:256:1")
-    .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"');
+function buildUpdateHints(options: {
+  snippet?: string;
+  return?: string;
+  boost?: string;
+}): Hints | undefined {
+  const hints: Hints = {};
+  let hasHints = false;
+
+  if (options.snippet) {
+    hints.snippet = parseSnippetParam(options.snippet);
+    hasHints = true;
+  }
+  if (options.return) {
+    hints.return_fields = parseReturnParam(options.return);
+    hasHints = true;
+  }
+  if (options.boost) {
+    hints.boost_script = toPainless(options.boost);
+    hasHints = true;
+  }
+
+  return hasHints ? hints : undefined;
 }
 
 async function confirm(name: string): Promise<boolean> {
@@ -123,6 +150,15 @@ function requireApiKey(options: { apiKey?: string }): string {
     process.exit(1);
   }
   return key;
+}
+
+function requireName(options: { name?: string }): string {
+  const name = options.name ?? process.env.SATORIC_INDEX;
+  if (!name) {
+    process.stderr.write("Error: -n/--name is required (or set SATORIC_INDEX)\n");
+    process.exit(1);
+  }
+  return name;
 }
 
 const listCommand = new Command("list")
@@ -150,11 +186,12 @@ const listCommand = new Command("list")
 
 const infoCommand = new Command("info")
   .description("Show index stats and optionally its schema")
-  .argument("<name>", "index name")
-  .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
   .option("--schema", "also print full mappings")
-  .action(async (name: string, options: { apiKey?: string; schema?: boolean }) => {
+  .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
+  .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
+  .action(async (options: { name?: string; apiKey?: string; schema?: boolean }) => {
     const apiKey = requireApiKey(options);
+    const name = requireName(options);
     try {
       const info = await apiRequest<IndexInfo>(
         "GET",
@@ -184,157 +221,158 @@ const infoCommand = new Command("info")
     }
   });
 
-const createCommand = addHintOptions(
-  new Command("create")
-    .description("Create an index")
-    .argument("<name>", "index name")
-    .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
-    .option("-C, --config <file>", "path to JSON or YAML config file (advanced)")
-    .addHelpText(
-      "after",
-      `
+const createCommand = new Command("create")
+  .description("Create an index")
+  .option("--id <field>", "field used as document ID")
+  .option("--language <lang>", "default analyzer language, e.g. english")
+  .option("--snippet <spec>", "snippet fields, e.g. body:256,title:128")
+  .option("--return <spec>", "return fields, e.g. url,title,description:128")
+  .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"')
+  .option("-C, --config <file>", "path to JSON or YAML config file (advanced)")
+  .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
+  .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
+  .addHelpText(
+    "after",
+    `
 Examples:
-  satoric index create my-docs --id url --search title,body --filter site --snippet body:256
-  satoric index create my-docs --config my-docs.json`
-    )
-).action(
-  async (
-    name: string,
-    options: {
+  satoric index create -n my-docs --id url --language english --snippet body:256,title:128
+  satoric index create -n my-docs --config my-docs.json`
+  )
+  .action(
+    async (options: {
+      name?: string;
       apiKey?: string;
       config?: string;
       id?: string;
-      search?: string;
-      filter?: string;
+      language?: string;
       snippet?: string;
+      return?: string;
       boost?: string;
-    }
-  ) => {
-    const apiKey = requireApiKey(options);
-    let body: Record<string, unknown> = {};
+    }) => {
+      const apiKey = requireApiKey(options);
+      const name = requireName(options);
+      let body: Record<string, unknown> = {};
 
-    if (options.config) {
-      try {
-        const config = loadConfig(options.config);
-        body = { mappings: config.mappings };
-      } catch (e) {
-        process.stderr.write(`Error loading config: ${(e as Error).message}\n`);
-        process.exit(1);
-      }
-    } else {
-      try {
-        const hints = buildHints(options);
-        if (hints) body = { hints };
-      } catch (e) {
-        process.stderr.write(`Error: ${(e as Error).message}\n`);
-        process.exit(1);
-      }
-    }
-
-    try {
-      await apiRequest(
-        "PUT",
-        `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(name)}`,
-        body,
-        apiKey
-      );
-      process.stdout.write(`Index '${name}' created.\n`);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
-        process.stderr.write(`Error: index '${name}' already exists\n`);
+      if (options.config) {
+        try {
+          const config = loadConfig(options.config);
+          body = { mappings: config.mappings };
+        } catch (e) {
+          process.stderr.write(`Error loading config: ${(e as Error).message}\n`);
+          process.exit(1);
+        }
       } else {
-        process.stderr.write(`Error: ${(e as Error).message}\n`);
+        try {
+          const hints = buildCreateHints(options);
+          if (hints) body = { hints };
+        } catch (e) {
+          process.stderr.write(`Error: ${(e as Error).message}\n`);
+          process.exit(1);
+        }
       }
-      process.exit(1);
-    }
-  }
-);
 
-const updateCommand = addHintOptions(
-  new Command("update")
-    .description("Update index search configuration")
-    .argument("<name>", "index name")
-    .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
-    .option("-C, --config <file>", "path to JSON or YAML config file (advanced)")
-    .addHelpText(
-      "after",
-      `
+      try {
+        await apiRequest(
+          "PUT",
+          `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(name)}`,
+          body,
+          apiKey
+        );
+        process.stdout.write(`Index '${name}' created.\n`);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 409) {
+          process.stderr.write(`Error: index '${name}' already exists\n`);
+        } else {
+          process.stderr.write(`Error: ${(e as Error).message}\n`);
+        }
+        process.exit(1);
+      }
+    }
+  );
+
+const updateCommand = new Command("update")
+  .description("Update index search configuration")
+  .option("--snippet <spec>", "snippet fields, e.g. body:256,title:128")
+  .option("--return <spec>", "return fields, e.g. url,title,description:128")
+  .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"')
+  .option("-C, --config <file>", "path to JSON or YAML config file (advanced)")
+  .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
+  .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
+  .addHelpText(
+    "after",
+    `
 Note: changing --snippet requires re-indexing documents for term vectors to take effect.
 
 Examples:
-  satoric index update my-docs --search title^2,body --snippet body:256 --boost "1 - rank/1000000"
-  satoric index update my-docs --filter site,rank`
-    )
-).action(
-  async (
-    name: string,
-    options: {
+  satoric index update -n my-docs --snippet body:256,title:128 --boost "1 - rank/1000000"
+  satoric index update -n my-docs --return url,title,description:128`
+  )
+  .action(
+    async (options: {
+      name?: string;
       apiKey?: string;
       config?: string;
-      id?: string;
-      search?: string;
-      filter?: string;
       snippet?: string;
+      return?: string;
       boost?: string;
-    }
-  ) => {
-    const apiKey = requireApiKey(options);
-    let body: Record<string, unknown>;
+    }) => {
+      const apiKey = requireApiKey(options);
+      const name = requireName(options);
+      let body: Record<string, unknown>;
 
-    if (options.config) {
-      try {
-        const config = loadConfig(options.config);
-        const meta = (config.mappings._meta ?? {}) as Record<string, unknown>;
-        body = { meta };
-      } catch (e) {
-        process.stderr.write(`Error loading config: ${(e as Error).message}\n`);
-        process.exit(1);
-      }
-    } else {
-      try {
-        const hints = buildHints(options);
-        if (!hints) {
-          process.stderr.write("Error: at least one option is required\n");
+      if (options.config) {
+        try {
+          const config = loadConfig(options.config);
+          const meta = (config.mappings._meta ?? {}) as Record<string, unknown>;
+          body = { meta };
+        } catch (e) {
+          process.stderr.write(`Error loading config: ${(e as Error).message}\n`);
           process.exit(1);
         }
-        body = { hints };
+      } else {
+        try {
+          const hints = buildUpdateHints(options);
+          if (!hints) {
+            process.stderr.write("Error: at least one option is required\n");
+            process.exit(1);
+          }
+          body = { hints };
+        } catch (e) {
+          process.stderr.write(`Error: ${(e as Error).message}\n`);
+          process.exit(1);
+        }
+      }
+
+      try {
+        await apiRequest(
+          "PATCH",
+          `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(name)}`,
+          body,
+          apiKey
+        );
+        process.stdout.write(`Index '${name}' updated.\n`);
+        if (options.snippet) {
+          process.stderr.write(
+            `Note: snippet field changed — re-index documents for term vectors to take effect.\n`
+          );
+        }
       } catch (e) {
         process.stderr.write(`Error: ${(e as Error).message}\n`);
         process.exit(1);
       }
     }
-
-    try {
-      await apiRequest(
-        "PATCH",
-        `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(name)}`,
-        body,
-        apiKey
-      );
-      process.stdout.write(`Index '${name}' updated.\n`);
-      if (options.snippet) {
-        process.stderr.write(
-          `Note: snippet field changed — re-index documents for term vectors to take effect.\n`
-        );
-      }
-    } catch (e) {
-      process.stderr.write(`Error: ${(e as Error).message}\n`);
-      process.exit(1);
-    }
-  }
-);
+  );
 
 const dropCommand = new Command("drop")
   .description("Delete an index and all its documents")
-  .argument("<name>", "index name")
-  .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
   .option("-f, --force", "skip confirmation prompt")
-  .action(async (name: string, options: { apiKey?: string; force?: boolean }) => {
+  .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
+  .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
+  .action(async (options: { name?: string; apiKey?: string; force?: boolean }) => {
     const apiKey = requireApiKey(options);
+    const name = requireName(options);
     if (!options.force) {
-      process.stderr.write(
-        `This will permanently delete index '${name}' and all its documents.\n`
-      );
+      process.stderr.write(`This will permanently delete index '${name}' and all its documents.\n`);
       const ok = await confirm(name);
       if (!ok) {
         process.stderr.write("Aborted.\n");
