@@ -68,7 +68,12 @@ Examples:
     const apiKey = requireApiKey(options);
 
     try {
-      await apiRequest("GET", `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(index)}`, undefined, apiKey);
+      await apiRequest(
+        "GET",
+        `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(index)}`,
+        undefined,
+        apiKey
+      );
     } catch (e) {
       process.stderr.write(`Error: ${(e as Error).message}\n`);
       process.exit(1);
