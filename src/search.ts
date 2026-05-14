@@ -1,21 +1,18 @@
 import { Command } from "commander";
 import { version } from "./version.js";
-import {
-  DEFAULT_BASE_URL,
-  DEFAULT_LIMIT,
-  DEFAULT_SNIPPETS,
-  DEFAULT_SNIPPET_SIZE,
-} from "./constants.js";
+import { DEFAULT_BASE_URL, DEFAULT_LIMIT } from "./constants.js";
+import { toPainless } from "./math.js";
 
 export function makeSearchCommand(): Command {
   return new Command("search")
     .description("Search an index")
     .argument("<query...>", "search query (Lucene syntax supported)")
-    .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
     .option("-l, --limit <number>", "max results", String(DEFAULT_LIMIT))
     .option("-p, --page <number>", "page number (1-indexed)", "1")
-    .option("--snippets <number>", "snippets per snippet field (0 to disable)", String(DEFAULT_SNIPPETS))
-    .option("--snippet-size <number>", "characters per snippet", String(DEFAULT_SNIPPET_SIZE))
+    .option("--snippet <spec>", "snippet fields, e.g. body:256,title:128")
+    .option("--return <spec>", "return fields, e.g. url,title,description:128")
+    .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"')
+    .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
     .addHelpText(
       "after",
       `
@@ -34,12 +31,19 @@ Examples:
       const url = new URL(`${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(index)}/search`);
       url.searchParams.set("q", query);
       url.searchParams.set("limit", options["limit"]!);
-      url.searchParams.set("snippets", options["snippets"]!);
       const page = Math.max(1, parseInt(options["page"]!, 10));
       const offset = (page - 1) * parseInt(options["limit"]!, 10);
       if (offset > 0) url.searchParams.set("offset", String(offset));
-      if (options["snippetSize"] !== String(DEFAULT_SNIPPET_SIZE))
-        url.searchParams.set("snippet_size", options["snippetSize"]!);
+      if (options["snippet"]) url.searchParams.set("snippet", options["snippet"]!);
+      if (options["return"]) url.searchParams.set("fields", options["return"]!);
+      if (options["boost"]) {
+        try {
+          url.searchParams.set("boost", toPainless(options["boost"]!));
+        } catch (e) {
+          process.stderr.write(`Error: ${(e as Error).message}\n`);
+          process.exit(1);
+        }
+      }
 
       try {
         const res = await fetch(url.toString(), {
