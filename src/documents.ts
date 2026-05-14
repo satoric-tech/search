@@ -66,6 +66,14 @@ Examples:
       process.exit(1);
     }
     const apiKey = requireApiKey(options);
+
+    try {
+      await apiRequest("GET", `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(index)}`, undefined, apiKey);
+    } catch (e) {
+      process.stderr.write(`Error: ${(e as Error).message}\n`);
+      process.exit(1);
+    }
+
     const start = Date.now();
     let docs = 0;
     let skipped = 0;
