@@ -73,9 +73,5 @@ export async function deleteDocuments(
   by: { id: string } | { query: string },
   baseUrl = DEFAULT_BASE_URL
 ): Promise<void> {
-  await apiRequest(
-    "POST",
-    `${baseUrl}/indexes/${encodeURIComponent(index)}/documents/delete`,
-    by
-  );
+  await apiRequest("POST", `${baseUrl}/indexes/${encodeURIComponent(index)}/documents/delete`, by);
 }

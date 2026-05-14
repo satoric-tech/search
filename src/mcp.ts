@@ -84,8 +84,7 @@ function buildServer(baseUrl: string): Server {
     const q = rawQ.trim();
 
     const rawIndex = args?.["index"];
-    const index =
-      typeof rawIndex === "string" && rawIndex.trim() ? rawIndex.trim() : DEFAULT_INDEX;
+    const index = typeof rawIndex === "string" && rawIndex.trim() ? rawIndex.trim() : DEFAULT_INDEX;
     const rawLimit = args?.["limit"];
     const limit = Math.min(50, Math.max(1, Math.floor(Number(rawLimit) || DEFAULT_LIMIT)));
     const rawOffset = args?.["offset"];
