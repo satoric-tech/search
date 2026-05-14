@@ -1,9 +1,9 @@
-export interface Collection {
+export interface Index {
   name: string;
   mappings: Record<string, unknown>;
 }
 
-export interface CollectionInfo {
+export interface IndexInfo {
   name: string;
   num_docs: number;
   size_in_bytes: number;

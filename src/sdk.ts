@@ -1,11 +1,11 @@
-import { DEFAULT_BASE_URL, DEFAULT_COLLECTION, DEFAULT_LIMIT } from "./constants.js";
+import { DEFAULT_BASE_URL, DEFAULT_INDEX, DEFAULT_LIMIT } from "./constants.js";
 import { apiRequest } from "./client.js";
-import type { Collection, Document, SearchResponse, SearchResult } from "./types.js";
+import type { Index, Document, SearchResponse, SearchResult } from "./types.js";
 
-export type { Collection, Document, SearchResult, SearchResponse };
+export type { Index, Document, SearchResult, SearchResponse };
 
 export interface SearchOptions {
-  collection?: string;
+  index?: string;
   limit?: number;
   offset?: number;
   /** @internal */
@@ -14,13 +14,13 @@ export interface SearchOptions {
 
 export async function search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
   const {
-    collection = DEFAULT_COLLECTION,
+    index = DEFAULT_INDEX,
     limit = DEFAULT_LIMIT,
     offset = 0,
     baseUrl = DEFAULT_BASE_URL,
   } = options;
 
-  const url = new URL(`${baseUrl}/collections/${encodeURIComponent(collection)}/search`);
+  const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/search`);
   url.searchParams.set("q", query);
   url.searchParams.set("limit", String(limit));
   if (offset > 0) url.searchParams.set("offset", String(offset));
@@ -28,64 +28,54 @@ export async function search(query: string, options: SearchOptions = {}): Promis
   return apiRequest<SearchResponse>("GET", url.toString());
 }
 
-export async function listCollections(baseUrl = DEFAULT_BASE_URL): Promise<Collection[]> {
-  return apiRequest<Collection[]>("GET", `${baseUrl}/collections`);
+export async function listIndexes(baseUrl = DEFAULT_BASE_URL): Promise<Index[]> {
+  return apiRequest<Index[]>("GET", `${baseUrl}/indexes`);
 }
 
-export async function getCollection(name: string, baseUrl = DEFAULT_BASE_URL): Promise<Collection> {
-  return apiRequest<Collection>("GET", `${baseUrl}/collections/${encodeURIComponent(name)}`);
+export async function getIndex(name: string, baseUrl = DEFAULT_BASE_URL): Promise<Index> {
+  return apiRequest<Index>("GET", `${baseUrl}/indexes/${encodeURIComponent(name)}`);
 }
 
-export async function createCollection(
+export async function createIndex(
   name: string,
   mappings: Record<string, unknown>,
   baseUrl = DEFAULT_BASE_URL
 ): Promise<void> {
-  await apiRequest("PUT", `${baseUrl}/collections/${encodeURIComponent(name)}`, { mappings });
+  await apiRequest("PUT", `${baseUrl}/indexes/${encodeURIComponent(name)}`, { mappings });
 }
 
-export async function updateCollectionMeta(
+export async function updateIndexMeta(
   name: string,
   meta: Record<string, unknown>,
   baseUrl = DEFAULT_BASE_URL
 ): Promise<void> {
-  await apiRequest("PATCH", `${baseUrl}/collections/${encodeURIComponent(name)}`, { meta });
+  await apiRequest("PATCH", `${baseUrl}/indexes/${encodeURIComponent(name)}`, { meta });
 }
 
-export async function deleteCollection(name: string, baseUrl = DEFAULT_BASE_URL): Promise<void> {
-  await apiRequest("DELETE", `${baseUrl}/collections/${encodeURIComponent(name)}`);
+export async function deleteIndex(name: string, baseUrl = DEFAULT_BASE_URL): Promise<void> {
+  await apiRequest("DELETE", `${baseUrl}/indexes/${encodeURIComponent(name)}`);
 }
 
 export async function upsertDocuments(
-  collection: string,
+  index: string,
   documents: Document[],
   baseUrl = DEFAULT_BASE_URL
 ): Promise<{ upserted: number }> {
   return apiRequest<{ upserted: number }>(
     "PUT",
-    `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/upsert`,
+    `${baseUrl}/indexes/${encodeURIComponent(index)}/documents/upsert`,
     { documents }
   );
 }
 
-export async function fetchDocument(
-  collection: string,
-  id: string,
-  baseUrl = DEFAULT_BASE_URL
-): Promise<Document> {
-  const url = new URL(`${baseUrl}/collections/${encodeURIComponent(collection)}/documents/fetch`);
-  url.searchParams.set("id", id);
-  return apiRequest<Document>("GET", url.toString());
-}
-
 export async function deleteDocuments(
-  collection: string,
+  index: string,
   by: { id: string } | { query: string },
   baseUrl = DEFAULT_BASE_URL
 ): Promise<void> {
   await apiRequest(
     "POST",
-    `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/delete`,
+    `${baseUrl}/indexes/${encodeURIComponent(index)}/documents/delete`,
     by
   );
 }

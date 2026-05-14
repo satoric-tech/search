@@ -52,26 +52,25 @@ function requireApiKey(options: { apiKey?: string }): string {
 
 export const upsertCommand = new Command("upsert")
   .description("Insert or replace documents from NDJSON or JSON array")
-  .option("-c, --collection <name>", "collection name (default: $SATORIC_COLLECTION)")
+  .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
   .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
   .option("-f, --file <path>", "input file (reads from stdin if omitted)")
   .addHelpText(
     "after",
     `
 Examples:
-  python index.py | satoric upsert
-  python index.py | satoric upsert -c llms-txt
-  satoric upsert -c my-docs --file docs.ndjson`
+  python index.py | satoric index doc upsert
+  python index.py | satoric index doc upsert -n llms-txt
+  satoric index doc upsert -n my-docs --file docs.ndjson`
   )
-  .action(async (options: { collection?: string; apiKey?: string; file?: string }) => {
-    const collection = options.collection ?? process.env.SATORIC_COLLECTION;
-    if (!collection) {
-      process.stderr.write("Error: -c/--collection is required (or set SATORIC_COLLECTION)\n");
+  .action(async (options: { name?: string; apiKey?: string; file?: string }) => {
+    const index = options.name ?? process.env.SATORIC_INDEX;
+    if (!index) {
+      process.stderr.write("Error: -n/--name is required (or set SATORIC_INDEX)\n");
       process.exit(1);
     }
     const apiKey = requireApiKey(options);
-    const baseUrl = DEFAULT_BASE_URL;
-    const url = `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/upsert`;
+    const url = `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(index)}/documents/upsert`;
 
     const start = Date.now();
     let docs = 0;
@@ -145,7 +144,7 @@ Examples:
 
 export const deleteCommand = new Command("delete")
   .description("Delete documents by id or query")
-  .option("-c, --collection <name>", "collection name (default: $SATORIC_COLLECTION)")
+  .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
   .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
   .option("--id <id>", "delete a document by id")
   .option("-q, --query <query>", "delete all documents matching a query")
@@ -153,18 +152,17 @@ export const deleteCommand = new Command("delete")
     "after",
     `
 Examples:
-  satoric delete --id "https://example.com/page"
-  satoric delete -c my-docs --query 'site:example.com'`
+  satoric index doc delete --id "https://example.com/page"
+  satoric index doc delete -n my-docs --query 'site:example.com'`
   )
   .action(
-    async (options: { collection?: string; apiKey?: string; id?: string; query?: string }) => {
-      const collection = options.collection ?? process.env.SATORIC_COLLECTION;
-      if (!collection) {
-        process.stderr.write("Error: -c/--collection is required (or set SATORIC_COLLECTION)\n");
+    async (options: { name?: string; apiKey?: string; id?: string; query?: string }) => {
+      const index = options.name ?? process.env.SATORIC_INDEX;
+      if (!index) {
+        process.stderr.write("Error: -n/--name is required (or set SATORIC_INDEX)\n");
         process.exit(1);
       }
       const apiKey = requireApiKey(options);
-      const baseUrl = DEFAULT_BASE_URL;
       if (!options.id && !options.query) {
         process.stderr.write("Error: --id or --query is required\n");
         process.exit(1);
@@ -173,7 +171,7 @@ Examples:
       try {
         await apiRequest(
           "POST",
-          `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/delete`,
+          `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(index)}/documents/delete`,
           body,
           apiKey
         );
