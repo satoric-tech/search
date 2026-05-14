@@ -14,8 +14,12 @@ export class ApiError extends Error {
 const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
 const ABORT_STATUSES = new Set([400, 401, 403, 404, 413]);
 
-export async function apiRequest<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const apiKey = process.env.SATORIC_API_KEY;
+export async function apiRequest<T>(
+  method: string,
+  url: string,
+  body?: unknown,
+  apiKey?: string
+): Promise<T> {
   return pRetry(
     async () => {
       const res = await fetch(url, {

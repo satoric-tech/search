@@ -3,9 +3,9 @@ import { createInterface } from "readline";
 import { Command } from "commander";
 import ora from "ora";
 import { DEFAULT_BASE_URL } from "./constants.js";
-import { apiRequest, ApiError } from "./client.js";
+import { apiRequest } from "./client.js";
 import { version } from "./version.js";
-import type { Collection, Document } from "./types.js";
+import type { Document } from "./types.js";
 
 async function* streamDocuments(filePath?: string): AsyncGenerator<Document> {
   const input = filePath ? createReadStream(filePath) : process.stdin;
@@ -41,49 +41,37 @@ const SPINNER = {
   ),
 };
 
+function requireApiKey(options: { apiKey?: string }): string {
+  const key = options.apiKey ?? process.env.SATORIC_API_KEY;
+  if (!key) {
+    process.stderr.write("Error: -k/--api-key is required (or set SATORIC_API_KEY)\n");
+    process.exit(1);
+  }
+  return key;
+}
+
 export const upsertCommand = new Command("upsert")
   .description("Insert or replace documents from NDJSON or JSON array")
-  .option("-c, --collection <name>", "collection to upsert into (default: $SATORIC_COLLECTION)")
+  .option("-c, --collection <name>", "collection name (default: $SATORIC_COLLECTION)")
+  .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
   .option("-f, --file <path>", "input file (reads from stdin if omitted)")
-  .option("--clean", "delete all existing documents before upserting")
   .addHelpText(
     "after",
     `
 Examples:
-  python index.py crawl | satoric upsert --collection llms-txt
-  satoric upsert --collection my-docs --file docs.ndjson --clean`
+  python index.py | satoric upsert
+  python index.py | satoric upsert -c llms-txt
+  satoric upsert -c my-docs --file docs.ndjson`
   )
-  .action(async (options: { collection?: string; file?: string; clean?: boolean }) => {
+  .action(async (options: { collection?: string; apiKey?: string; file?: string }) => {
     const collection = options.collection ?? process.env.SATORIC_COLLECTION;
     if (!collection) {
-      process.stderr.write("Error: --collection is required (or set SATORIC_COLLECTION)\n");
+      process.stderr.write("Error: -c/--collection is required (or set SATORIC_COLLECTION)\n");
       process.exit(1);
     }
+    const apiKey = requireApiKey(options);
     const baseUrl = DEFAULT_BASE_URL;
     const url = `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/upsert`;
-    const apiKey = process.env.SATORIC_API_KEY;
-
-    if (options.clean) {
-      const spinner = ora({ stream: process.stderr, spinner: SPINNER }).start("fetching schema…");
-      try {
-        const col = await apiRequest<Collection>(
-          "GET",
-          `${baseUrl}/collections/${encodeURIComponent(collection)}`
-        );
-        spinner.text = "dropping collection…";
-        await apiRequest("DELETE", `${baseUrl}/collections/${encodeURIComponent(collection)}`);
-        spinner.text = "recreating collection…";
-        await apiRequest("PUT", `${baseUrl}/collections/${encodeURIComponent(collection)}`, { mappings: col.mappings });
-        spinner.succeed("collection reset");
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 404) {
-          spinner.info("collection does not exist, skipping reset");
-        } else {
-          spinner.fail(`Error: ${(e as Error).message}`);
-          process.exit(1);
-        }
-      }
-    }
 
     const start = Date.now();
     let docs = 0;
@@ -105,7 +93,10 @@ Examples:
       try {
         for await (const doc of streamDocuments(options.file)) {
           const line = JSON.stringify(doc) + "\n";
-          if (line.length > 1024 * 1024) { skipped++; continue; }
+          if (line.length > 1024 * 1024) {
+            skipped++;
+            continue;
+          }
           docs++;
           await writer.write(encoder.encode(line));
           const rate = Math.round(docs / Math.max((Date.now() - start) / 1000, 0.001));
@@ -125,10 +116,9 @@ Examples:
         headers: {
           "Content-Type": "application/x-ndjson",
           "User-Agent": `satoric/${version}`,
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          Authorization: `Bearer ${apiKey}`,
         },
         body: readable,
-        // @ts-ignore duplex required for streaming request bodies in Node
         duplex: "half",
       });
 
@@ -143,9 +133,9 @@ Examples:
       const rate = Math.round(result.upserted / streamSecs);
       spinner.succeed(
         `${result.upserted.toLocaleString()} indexed  ` +
-        `${result.failed + skipped} skipped  ` +
-        `${rate.toLocaleString()} docs/s  ` +
-        `[${elapsed()}]`
+          `${result.failed + skipped} skipped  ` +
+          `${rate.toLocaleString()} docs/s  ` +
+          `[${elapsed()}]`
       );
     } catch (e) {
       spinner.fail(`Error: ${(e as Error).message}`);
@@ -153,67 +143,44 @@ Examples:
     }
   });
 
-export const fetchCommand = new Command("fetch")
-  .description("Fetch a document by id")
-  .option("-c, --collection <name>", "collection to fetch from (default: $SATORIC_COLLECTION)")
-  .requiredOption("--id <id>", "document id (URL)")
-  .action(async (options: { collection?: string; id: string }) => {
-    const collection = options.collection ?? process.env.SATORIC_COLLECTION;
-    if (!collection) {
-      process.stderr.write("Error: --collection is required (or set SATORIC_COLLECTION)\n");
-      process.exit(1);
-    }
-    const baseUrl = DEFAULT_BASE_URL;
-    try {
-      const url = new URL(
-        `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/fetch`
-      );
-      url.searchParams.set("id", options.id);
-      const doc = await apiRequest<Document>("GET", url.toString());
-      process.stdout.write(JSON.stringify(doc, null, 2) + "\n");
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 404) {
-        process.stderr.write("Error: document not found\n");
-      } else {
-        process.stderr.write(`Error: ${(e as Error).message}\n`);
-      }
-      process.exit(1);
-    }
-  });
-
 export const deleteCommand = new Command("delete")
   .description("Delete documents by id or query")
-  .option("-c, --collection <name>", "collection to delete from (default: $SATORIC_COLLECTION)")
+  .option("-c, --collection <name>", "collection name (default: $SATORIC_COLLECTION)")
+  .option("-k, --api-key <key>", "API key (default: $SATORIC_API_KEY)")
   .option("--id <id>", "delete a document by id")
   .option("-q, --query <query>", "delete all documents matching a query")
   .addHelpText(
     "after",
     `
 Examples:
-  satoric delete --collection my-docs --id "https://example.com/page"
-  satoric delete --collection my-docs --query 'site:example.com'`
+  satoric delete --id "https://example.com/page"
+  satoric delete -c my-docs --query 'site:example.com'`
   )
-  .action(async (options: { collection?: string; id?: string; query?: string }) => {
-    const collection = options.collection ?? process.env.SATORIC_COLLECTION;
-    if (!collection) {
-      process.stderr.write("Error: --collection is required (or set SATORIC_COLLECTION)\n");
-      process.exit(1);
+  .action(
+    async (options: { collection?: string; apiKey?: string; id?: string; query?: string }) => {
+      const collection = options.collection ?? process.env.SATORIC_COLLECTION;
+      if (!collection) {
+        process.stderr.write("Error: -c/--collection is required (or set SATORIC_COLLECTION)\n");
+        process.exit(1);
+      }
+      const apiKey = requireApiKey(options);
+      const baseUrl = DEFAULT_BASE_URL;
+      if (!options.id && !options.query) {
+        process.stderr.write("Error: --id or --query is required\n");
+        process.exit(1);
+      }
+      const body = options.id ? { id: options.id } : { query: options.query };
+      try {
+        await apiRequest(
+          "POST",
+          `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/delete`,
+          body,
+          apiKey
+        );
+        process.stdout.write("Deleted.\n");
+      } catch (e) {
+        process.stderr.write(`Error: ${(e as Error).message}\n`);
+        process.exit(1);
+      }
     }
-    const baseUrl = DEFAULT_BASE_URL;
-    if (!options.id && !options.query) {
-      process.stderr.write("Error: --id or --query is required\n");
-      process.exit(1);
-    }
-    const body = options.id ? { id: options.id } : { query: options.query };
-    try {
-      await apiRequest(
-        "POST",
-        `${baseUrl}/collections/${encodeURIComponent(collection)}/documents/delete`,
-        body
-      );
-      process.stdout.write("Deleted.\n");
-    } catch (e) {
-      process.stderr.write(`Error: ${(e as Error).message}\n`);
-      process.exit(1);
-    }
-  });
+  );

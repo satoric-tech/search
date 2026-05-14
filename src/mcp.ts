@@ -112,7 +112,12 @@ function buildServer(baseUrl: string): Server {
           isError: true,
         };
       }
-      const data = (await response.json()) as { results: unknown[]; total: number; limit: number; offset: number };
+      const data = (await response.json()) as {
+        results: unknown[];
+        total: number;
+        limit: number;
+        offset: number;
+      };
       const header = `total: ${data.total}, limit: ${data.limit}, offset: ${data.offset}\n\n`;
       return {
         content: [{ type: "text" as const, text: header + JSON.stringify(data.results, null, 2) }],
