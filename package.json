@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "files": [
+    "bin/",
     "dist/",
     "README.md",
     "LICENSE"
@@ -16,7 +17,7 @@
     }
   },
   "bin": {
-    "satoric": "./dist/cli.js"
+    "satoric": "./bin/satoric"
   },
   "scripts": {
     "build": "tsc",
