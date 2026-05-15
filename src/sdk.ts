@@ -1,13 +1,21 @@
 import { DEFAULT_BASE_URL, DEFAULT_INDEX, DEFAULT_LIMIT } from "./constants.js";
 import { apiRequest } from "./client.js";
-import type { Index, Document, SearchResponse, SearchResult } from "./types.js";
+import type {
+  SearchResponse,
+  SearchResult,
+  AuthorityResponse,
+  AuthorityResult,
+  RelatedResponse,
+  RelatedTerm,
+} from "./types.js";
 
-export type { Index, Document, SearchResult, SearchResponse };
+export type { SearchResponse, SearchResult, AuthorityResponse, AuthorityResult, RelatedResponse, RelatedTerm };
 
 export interface SearchOptions {
   index?: string;
   limit?: number;
   offset?: number;
+  fields?: string;
   /** @internal */
   baseUrl?: string;
 }
@@ -17,6 +25,7 @@ export async function search(query: string, options: SearchOptions = {}): Promis
     index = DEFAULT_INDEX,
     limit = DEFAULT_LIMIT,
     offset = 0,
+    fields,
     baseUrl = DEFAULT_BASE_URL,
   } = options;
 
@@ -24,54 +33,55 @@ export async function search(query: string, options: SearchOptions = {}): Promis
   url.searchParams.set("q", query);
   url.searchParams.set("limit", String(limit));
   if (offset > 0) url.searchParams.set("offset", String(offset));
+  if (fields) url.searchParams.set("fields", fields);
 
   return apiRequest<SearchResponse>("GET", url.toString());
 }
 
-export async function listIndexes(baseUrl = DEFAULT_BASE_URL): Promise<Index[]> {
-  return apiRequest<Index[]>("GET", `${baseUrl}/indexes`);
+export interface AuthorityOptions {
+  index?: string;
+  field: string;
+  limit?: number;
+  /** @internal */
+  baseUrl?: string;
 }
 
-export async function getIndex(name: string, baseUrl = DEFAULT_BASE_URL): Promise<Index> {
-  return apiRequest<Index>("GET", `${baseUrl}/indexes/${encodeURIComponent(name)}`);
+export async function authority(query: string, options: AuthorityOptions): Promise<AuthorityResponse> {
+  const {
+    index = DEFAULT_INDEX,
+    field,
+    limit = DEFAULT_LIMIT,
+    baseUrl = DEFAULT_BASE_URL,
+  } = options;
+
+  const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/authorities`);
+  url.searchParams.set("q", query);
+  url.searchParams.set("field", field);
+  url.searchParams.set("limit", String(limit));
+
+  return apiRequest<AuthorityResponse>("GET", url.toString());
 }
 
-export async function createIndex(
-  name: string,
-  mappings: Record<string, unknown>,
-  baseUrl = DEFAULT_BASE_URL
-): Promise<void> {
-  await apiRequest("PUT", `${baseUrl}/indexes/${encodeURIComponent(name)}`, { mappings });
+export interface RelatedOptions {
+  index?: string;
+  field: string;
+  limit?: number;
+  /** @internal */
+  baseUrl?: string;
 }
 
-export async function updateIndexMeta(
-  name: string,
-  meta: Record<string, unknown>,
-  baseUrl = DEFAULT_BASE_URL
-): Promise<void> {
-  await apiRequest("PATCH", `${baseUrl}/indexes/${encodeURIComponent(name)}`, { meta });
-}
+export async function related(query: string, options: RelatedOptions): Promise<RelatedResponse> {
+  const {
+    index = DEFAULT_INDEX,
+    field,
+    limit = DEFAULT_LIMIT,
+    baseUrl = DEFAULT_BASE_URL,
+  } = options;
 
-export async function deleteIndex(name: string, baseUrl = DEFAULT_BASE_URL): Promise<void> {
-  await apiRequest("DELETE", `${baseUrl}/indexes/${encodeURIComponent(name)}`);
-}
+  const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/related`);
+  url.searchParams.set("q", query);
+  url.searchParams.set("field", field);
+  url.searchParams.set("limit", String(limit));
 
-export async function upsertDocuments(
-  index: string,
-  documents: Document[],
-  baseUrl = DEFAULT_BASE_URL
-): Promise<{ upserted: number }> {
-  return apiRequest<{ upserted: number }>(
-    "PUT",
-    `${baseUrl}/indexes/${encodeURIComponent(index)}/documents/upsert`,
-    { documents }
-  );
-}
-
-export async function deleteDocuments(
-  index: string,
-  by: { id: string } | { query: string },
-  baseUrl = DEFAULT_BASE_URL
-): Promise<void> {
-  await apiRequest("POST", `${baseUrl}/indexes/${encodeURIComponent(index)}/documents/delete`, by);
+  return apiRequest<RelatedResponse>("GET", url.toString());
 }
