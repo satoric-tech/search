@@ -24,7 +24,7 @@ interface ReturnField {
 
 interface Hints {
   id?: string;
-  language?: string;
+  analyzer?: string;
   return_fields?: ReturnField[];
   boost_script?: string;
 }
@@ -77,7 +77,7 @@ function parseReturnParam(s: string): ReturnField[] {
 
 function buildCreateHints(options: {
   id?: string;
-  language?: string;
+  analyzer?: string;
   return?: string;
   boost?: string;
 }): Hints | undefined {
@@ -88,8 +88,8 @@ function buildCreateHints(options: {
     hints.id = options.id;
     hasHints = true;
   }
-  if (options.language) {
-    hints.language = options.language;
+  if (options.analyzer) {
+    hints.analyzer = options.analyzer;
     hasHints = true;
   }
   if (options.return) {
@@ -105,15 +105,15 @@ function buildCreateHints(options: {
 }
 
 function buildUpdateHints(options: {
-  language?: string;
+  analyzer?: string;
   return?: string;
   boost?: string;
 }): Hints | undefined {
   const hints: Hints = {};
   let hasHints = false;
 
-  if (options.language) {
-    hints.language = options.language;
+  if (options.analyzer) {
+    hints.analyzer = options.analyzer;
     hasHints = true;
   }
   if (options.return) {
@@ -219,7 +219,7 @@ const infoCommand = new Command("info")
 const createCommand = new Command("create")
   .description("Create an index")
   .option("--id <field>", "field used as document ID")
-  .option("--language <lang>", "default analyzer language, e.g. english")
+  .option("--analyzer <name>", "default text analyzer (default: standard)", "standard")
   .option("--return <spec>", "return fields, e.g. url,title:128,body:~256,body:-256")
   .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"')
   .option("-C, --config <file>", "path to JSON or YAML config file (advanced)")
@@ -291,10 +291,7 @@ Examples:
 
 const updateCommand = new Command("update")
   .description("Update index search configuration")
-  .option(
-    "--language <lang>",
-    "default analyzer language, e.g. english (briefly takes index offline)"
-  )
+  .option("--analyzer <name>", "default text analyzer, e.g. english (briefly takes index offline)")
   .option("--return <spec>", "return fields, e.g. url,title:128,body:~256,body:-256")
   .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"')
   .option("-C, --config <file>", "path to JSON or YAML config file (advanced)")
@@ -305,14 +302,14 @@ const updateCommand = new Command("update")
     `
 Examples:
   satoric index update -n my-docs --return "url,title:128,body:~256" --boost "1 - rank/1000000"
-  satoric index update -n my-docs --language english`
+  satoric index update -n my-docs --analyzer english`
   )
   .action(
     async (options: {
       name?: string;
       apiKey?: string;
       config?: string;
-      language?: string;
+      analyzer?: string;
       return?: string;
       boost?: string;
     }) => {
@@ -320,9 +317,9 @@ Examples:
       const name = requireName(options);
       let body: Record<string, unknown>;
 
-      if (options.language) {
+      if (options.analyzer) {
         process.stderr.write(
-          `Warning: changing the language analyzer will briefly take index '${name}' offline.\n`
+          `Warning: changing the analyzer will briefly take index '${name}' offline.\n`
         );
       }
 
