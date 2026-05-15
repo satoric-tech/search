@@ -363,7 +363,7 @@ Examples:
     }
   );
 
-const dropCommand = new Command("drop")
+const deleteIndexCommand = new Command("delete")
   .description("Delete an index and all its documents")
   .option("-f, --force", "skip confirmation prompt")
   .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
@@ -401,15 +401,15 @@ const docGroup = new Command("doc")
   .description("Manage documents within an index")
   .action((_opts, cmd: Command) => cmd.help())
   .addCommand(upsertCommand)
-  .addCommand(deleteCommand)
-  .addCommand(makeSearchCommand());
+  .addCommand(makeSearchCommand())
+  .addCommand(deleteCommand);
 
 export const indexCommand = new Command("index")
   .description("Manage indexes")
   .action((_opts, cmd: Command) => cmd.help())
-  .addCommand(listCommand)
+  .addCommand(docGroup)
   .addCommand(createCommand)
-  .addCommand(updateCommand)
+  .addCommand(listCommand)
   .addCommand(infoCommand)
-  .addCommand(dropCommand)
-  .addCommand(docGroup);
+  .addCommand(updateCommand)
+  .addCommand(deleteIndexCommand);
