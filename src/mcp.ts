@@ -129,7 +129,9 @@ function buildServer(baseUrl: string): Server {
     const rawLimit = args?.["limit"];
     const limit = Math.max(1, Math.floor(Number(rawLimit) || DEFAULT_LIMIT));
 
-    async function mcpFetch(url: URL): Promise<{ content: { type: "text"; text: string }[]; isError?: boolean }> {
+    async function mcpFetch(
+      url: URL
+    ): Promise<{ content: { type: "text"; text: string }[]; isError?: boolean }> {
       try {
         const response = await fetch(url.toString(), {
           headers: { "User-Agent": `satoric-mcp/${version}` },
@@ -137,7 +139,9 @@ function buildServer(baseUrl: string): Server {
         if (!response.ok) {
           const body = (await response.json().catch(() => null)) as { error?: string } | null;
           return {
-            content: [{ type: "text" as const, text: `Error: ${body?.error ?? `HTTP ${response.status}`}` }],
+            content: [
+              { type: "text" as const, text: `Error: ${body?.error ?? `HTTP ${response.status}`}` },
+            ],
             isError: true,
           };
         }

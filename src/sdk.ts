@@ -9,7 +9,14 @@ import type {
   RelatedTerm,
 } from "./types.js";
 
-export type { SearchResponse, SearchResult, AuthorityResponse, AuthorityResult, RelatedResponse, RelatedTerm };
+export type {
+  SearchResponse,
+  SearchResult,
+  AuthorityResponse,
+  AuthorityResult,
+  RelatedResponse,
+  RelatedTerm,
+};
 
 export interface SearchOptions {
   index?: string;
@@ -46,7 +53,10 @@ export interface AuthorityOptions {
   baseUrl?: string;
 }
 
-export async function authority(query: string, options: AuthorityOptions): Promise<AuthorityResponse> {
+export async function authority(
+  query: string,
+  options: AuthorityOptions
+): Promise<AuthorityResponse> {
   const {
     index = DEFAULT_INDEX,
     field,

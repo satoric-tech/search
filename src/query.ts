@@ -36,26 +36,28 @@ Examples:
   satoric authority "mcp" -n llms-txt --field site
   satoric authority "payments api" -n llms-txt --field site --limit 20`
   )
-  .action(async (queryParts: string[], options: { name?: string; field?: string; limit?: string }) => {
-    const name = requireName(options);
-    if (!options.field) {
-      process.stderr.write("Error: --field is required (e.g. --field site)\n");
-      process.exit(1);
-    }
-    const query = queryParts.join(" ").trim();
-    const url = new URL(`${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(name)}/authorities`);
-    url.searchParams.set("q", query);
-    url.searchParams.set("field", options.field);
-    url.searchParams.set("limit", options.limit ?? String(DEFAULT_LIMIT));
+  .action(
+    async (queryParts: string[], options: { name?: string; field?: string; limit?: string }) => {
+      const name = requireName(options);
+      if (!options.field) {
+        process.stderr.write("Error: --field is required (e.g. --field site)\n");
+        process.exit(1);
+      }
+      const query = queryParts.join(" ").trim();
+      const url = new URL(`${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(name)}/authorities`);
+      url.searchParams.set("q", query);
+      url.searchParams.set("field", options.field);
+      url.searchParams.set("limit", options.limit ?? String(DEFAULT_LIMIT));
 
-    try {
-      const raw = await queryGet(url);
-      process.stdout.write(JSON.stringify(raw, null, 2) + "\n");
-    } catch (e) {
-      process.stderr.write(`Error: ${(e as Error).message}\n`);
-      process.exit(1);
+      try {
+        const raw = await queryGet(url);
+        process.stdout.write(JSON.stringify(raw, null, 2) + "\n");
+      } catch (e) {
+        process.stderr.write(`Error: ${(e as Error).message}\n`);
+        process.exit(1);
+      }
     }
-  });
+  );
 
 export const relatedCommand = new Command("related")
   .description("Find terms statistically associated with a query")
@@ -70,23 +72,25 @@ Examples:
   satoric related "mcp" -n llms-txt --field body
   satoric related "payments api" -n llms-txt --field body --limit 20`
   )
-  .action(async (queryParts: string[], options: { name?: string; field?: string; limit?: string }) => {
-    const name = requireName(options);
-    if (!options.field) {
-      process.stderr.write("Error: --field is required (e.g. --field body)\n");
-      process.exit(1);
-    }
-    const query = queryParts.join(" ").trim();
-    const url = new URL(`${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(name)}/related`);
-    url.searchParams.set("q", query);
-    url.searchParams.set("field", options.field);
-    url.searchParams.set("limit", options.limit ?? String(DEFAULT_LIMIT));
+  .action(
+    async (queryParts: string[], options: { name?: string; field?: string; limit?: string }) => {
+      const name = requireName(options);
+      if (!options.field) {
+        process.stderr.write("Error: --field is required (e.g. --field body)\n");
+        process.exit(1);
+      }
+      const query = queryParts.join(" ").trim();
+      const url = new URL(`${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(name)}/related`);
+      url.searchParams.set("q", query);
+      url.searchParams.set("field", options.field);
+      url.searchParams.set("limit", options.limit ?? String(DEFAULT_LIMIT));
 
-    try {
-      const raw = await queryGet(url);
-      process.stdout.write(JSON.stringify(raw, null, 2) + "\n");
-    } catch (e) {
-      process.stderr.write(`Error: ${(e as Error).message}\n`);
-      process.exit(1);
+      try {
+        const raw = await queryGet(url);
+        process.stdout.write(JSON.stringify(raw, null, 2) + "\n");
+      } catch (e) {
+        process.stderr.write(`Error: ${(e as Error).message}\n`);
+        process.exit(1);
+      }
     }
-  });
+  );
