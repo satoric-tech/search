@@ -100,11 +100,6 @@ const sdk = await import(join(ROOT, "dist/sdk.js"));
 
 test("SDK exports expected functions", () => {
   assert.equal(typeof sdk.search, "function");
-  assert.equal(typeof sdk.listIndexes, "function");
-  assert.equal(typeof sdk.getIndex, "function");
-  assert.equal(typeof sdk.createIndex, "function");
-  assert.equal(typeof sdk.updateIndexMeta, "function");
-  assert.equal(typeof sdk.deleteIndex, "function");
-  assert.equal(typeof sdk.upsertDocuments, "function");
-  assert.equal(typeof sdk.deleteDocuments, "function");
+  assert.equal(typeof sdk.authority, "function");
+  assert.equal(typeof sdk.related, "function");
 });
