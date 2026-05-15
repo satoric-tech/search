@@ -104,10 +104,18 @@ function buildCreateHints(options: {
   return hasHints ? hints : undefined;
 }
 
-function buildUpdateHints(options: { return?: string; boost?: string }): Hints | undefined {
+function buildUpdateHints(options: {
+  language?: string;
+  return?: string;
+  boost?: string;
+}): Hints | undefined {
   const hints: Hints = {};
   let hasHints = false;
 
+  if (options.language) {
+    hints.language = options.language;
+    hasHints = true;
+  }
   if (options.return) {
     hints.return_fields = parseReturnParam(options.return);
     hasHints = true;
@@ -283,6 +291,10 @@ Examples:
 
 const updateCommand = new Command("update")
   .description("Update index search configuration")
+  .option(
+    "--language <lang>",
+    "default analyzer language, e.g. english (briefly takes index offline)"
+  )
   .option("--return <spec>", "return fields, e.g. url,title:128,body:~256,body:-256")
   .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"')
   .option("-C, --config <file>", "path to JSON or YAML config file (advanced)")
@@ -291,23 +303,28 @@ const updateCommand = new Command("update")
   .addHelpText(
     "after",
     `
-Note: adding :~N (snippet) requires re-indexing documents for term vectors to take effect.
-
 Examples:
   satoric index update -n my-docs --return "url,title:128,body:~256" --boost "1 - rank/1000000"
-  satoric index update -n my-docs --return "url,title:128,body:-256"`
+  satoric index update -n my-docs --language english`
   )
   .action(
     async (options: {
       name?: string;
       apiKey?: string;
       config?: string;
+      language?: string;
       return?: string;
       boost?: string;
     }) => {
       const apiKey = requireApiKey(options);
       const name = requireName(options);
       let body: Record<string, unknown>;
+
+      if (options.language) {
+        process.stderr.write(
+          `Warning: changing the language analyzer will briefly take index '${name}' offline.\n`
+        );
+      }
 
       if (options.config) {
         try {
@@ -333,13 +350,18 @@ Examples:
       }
 
       try {
-        await apiRequest(
+        const result = await apiRequest<{ ok: boolean; reindexing: boolean }>(
           "PATCH",
           `${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(name)}`,
           body,
           apiKey
         );
         process.stdout.write(`Index '${name}' updated.\n`);
+        if (result.reindexing) {
+          process.stderr.write(
+            `Re-indexing in background — snippets and language changes will take effect shortly.\n`
+          );
+        }
       } catch (e) {
         process.stderr.write(`Error: ${(e as Error).message}\n`);
         process.exit(1);
