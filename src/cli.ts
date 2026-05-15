@@ -4,6 +4,7 @@ import { version } from "./version.js";
 import { makeSearchCommand } from "./search.js";
 import { indexCommand } from "./indexes.js";
 import { mcpCommand } from "./mcp.js";
+import { authorityCommand, relatedCommand } from "./query.js";
 
 const program = new Command("satoric")
   .version(version)
@@ -16,6 +17,8 @@ Environment:
   SATORIC_INDEX      Default index name`
   )
   .addCommand(makeSearchCommand())
+  .addCommand(authorityCommand)
+  .addCommand(relatedCommand)
   .addCommand(indexCommand)
   .addCommand(mcpCommand);
 
