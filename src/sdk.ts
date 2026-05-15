@@ -1,39 +1,97 @@
-import { version } from "./version.js";
-import { DEFAULT_BASE_URL, DEFAULT_LIMIT } from "./constants.js";
+import { DEFAULT_BASE_URL, DEFAULT_INDEX, DEFAULT_LIMIT } from "./constants.js";
+import { apiRequest } from "./client.js";
+import type {
+  SearchResponse,
+  SearchResult,
+  AuthorityResponse,
+  AuthorityResult,
+  RelatedResponse,
+  RelatedTerm,
+} from "./types.js";
 
-export interface SearchResult {
-  url: string;
-  site: string;
-  site_name: string;
-  title: string;
-  description: string;
-  snippet: string;
-}
+export type {
+  SearchResponse,
+  SearchResult,
+  AuthorityResponse,
+  AuthorityResult,
+  RelatedResponse,
+  RelatedTerm,
+};
 
 export interface SearchOptions {
+  index?: string;
   limit?: number;
   offset?: number;
+  fields?: string;
   /** @internal */
   baseUrl?: string;
 }
 
-export async function search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
-  const { limit = DEFAULT_LIMIT, offset = 0, baseUrl = DEFAULT_BASE_URL } = options;
+export async function search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
+  const {
+    index = DEFAULT_INDEX,
+    limit = DEFAULT_LIMIT,
+    offset = 0,
+    fields,
+    baseUrl = DEFAULT_BASE_URL,
+  } = options;
 
-  const url = new URL(`${baseUrl}/search`);
+  const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/search`);
   url.searchParams.set("q", query);
   url.searchParams.set("limit", String(limit));
   if (offset > 0) url.searchParams.set("offset", String(offset));
+  if (fields) url.searchParams.set("fields", fields);
 
-  const response = await fetch(url.toString(), {
-    headers: { "User-Agent": `satoric-sdk/${version}` },
-  });
+  return apiRequest<SearchResponse>("GET", url.toString());
+}
 
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `HTTP ${response.status}`);
-  }
+export interface AuthorityOptions {
+  index?: string;
+  field: string;
+  limit?: number;
+  /** @internal */
+  baseUrl?: string;
+}
 
-  const data = (await response.json()) as { results: SearchResult[]; total: number };
-  return data.results;
+export async function authority(
+  query: string,
+  options: AuthorityOptions
+): Promise<AuthorityResponse> {
+  const {
+    index = DEFAULT_INDEX,
+    field,
+    limit = DEFAULT_LIMIT,
+    baseUrl = DEFAULT_BASE_URL,
+  } = options;
+
+  const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/authorities`);
+  url.searchParams.set("q", query);
+  url.searchParams.set("field", field);
+  url.searchParams.set("limit", String(limit));
+
+  return apiRequest<AuthorityResponse>("GET", url.toString());
+}
+
+export interface RelatedOptions {
+  index?: string;
+  field: string;
+  limit?: number;
+  /** @internal */
+  baseUrl?: string;
+}
+
+export async function related(query: string, options: RelatedOptions): Promise<RelatedResponse> {
+  const {
+    index = DEFAULT_INDEX,
+    field,
+    limit = DEFAULT_LIMIT,
+    baseUrl = DEFAULT_BASE_URL,
+  } = options;
+
+  const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/related`);
+  url.searchParams.set("q", query);
+  url.searchParams.set("field", field);
+  url.searchParams.set("limit", String(limit));
+
+  return apiRequest<RelatedResponse>("GET", url.toString());
 }

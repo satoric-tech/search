@@ -25,12 +25,14 @@
 
 ---
 
-Satoric is a full-text web search engine for developer docs, APIs, and technical references from [llms.txt](https://llmstxt.org/) sites. Available as a CLI, SDK, MCP server, and agent skill.
+Satoric is a full-text search engine for developer docs, APIs, and technical references. It indexes llms.txt sites across the web and is available as a CLI, SDK, and MCP server.
 
 ## Installation
 
 ```bash
 npm install @satoric/search
+# or run without installing
+npx @satoric/search <command>
 ```
 
 ## Query syntax
@@ -62,46 +64,72 @@ Lucene query syntax enables precise queries:
 | `^` | Boost a term | `title:auth^2.0 content:auth` |
 | `~` | Fuzzy / phrase slop | `webhook~1` / `"big wolf"~1` |
 
-Agents can help you combine operators for expressive queries:
-
-```
-+site:stripe.com "webhook signature" -title:deprecated content:verification^2.0
-site:supabase.com (edge functions OR "row level security") -title:changelog
-title:quickstart^2.0 content:authentication site:clerk.com
-```
+---
 
 ## CLI
 
-Search documentation from the command line: `npx @satoric/search search <query> [options]`
+### search
+
+Search across all indexed docs. Use `site:` to scope to a specific domain:
 
 ```bash
-npx @satoric/search search "mcp server setup"
-npx @satoric/search search "site:stripe.com webhook verification" --limit 5
-npx @satoric/search search "redis connection pooling" --limit 10 --offset 3
+satoric search "mcp server setup"
+satoric search "site:stripe.com webhook" --limit 5
+satoric search "oauth2 token refresh" --return url,title,body:256
 ```
 
-Supported flags:
+### authority
 
-| Flag           | Short | Default | Max  | Description                      |
-| -------------- | ----- | ------- | ---- | -------------------------------- |
-| `--limit <n>`  | `-l`  | `10`    | `50` | Max results to return            |
-| `--offset <n>` | `-o`  | `0`     | —    | Results to skip (for pagination) |
+Find which sites have the most coverage for a topic:
+
+```bash
+satoric authority "mcp server" --field site
+satoric authority "payments api" --field site --limit 20
+satoric authority "kubernetes deployment" --field site
+```
+
+### related
+
+Find terms statistically associated with a query:
+
+```bash
+satoric related "mcp" --field body
+satoric related "payments api" --field body --limit 20
+satoric related "kubernetes deployment" --field body
+```
+
+Run any command with `--help` for the full list of flags.
+
+---
 
 ## SDK
 
-Import and call `search()` directly from TypeScript or JavaScript.
+Import and call directly from TypeScript or JavaScript:
 
 ```typescript
-import { search } from '@satoric/search';
+import { search, authority, related } from '@satoric/search';
 
+// Full-text search
 const results = await search("mcp server setup");
-const results = await search("site:stripe.com webhook verification", { limit: 5 });
-const results = await search("redis connection pooling", { limit: 10, offset: 3 });
+const results = await search("site:stripe.com webhook", { limit: 5 });
+const results = await search("oauth2 token refresh", { fields: "url,title,body:256" });
+
+// Top sites for a topic
+const top = await authority("mcp server", { field: "site" });
+// top.results → [{ value: "modelcontextprotocol.io", count: 42 }, ...]
+
+// Statistically related terms
+const terms = await related("mcp", { field: "body" });
+// terms.results → [{ term: "server", score: 12.4 }, ...]
 ```
+
+All three functions accept an optional `index` (default: `llms-txt`) and `limit` (default: `10`).
+
+---
 
 ## MCP
 
-Add to your MCP config to expose a `search` tool to your agents:
+Add to your MCP config to expose `search`, `authority`, and `related` tools to your agents:
 
 ```json
 {
@@ -114,9 +142,36 @@ Add to your MCP config to expose a `search` tool to your agents:
 }
 ```
 
-## Agent skill
+### Tools
 
-See [SKILL.md](SKILL.md)
+| Tool | Description |
+| --- | --- |
+| `search` | Full-text search. Args: `q`, `limit`, `offset` |
+| `authority` | Top field values for a query. Args: `q`, `field`, `limit` |
+| `related` | Statistically associated terms. Args: `q`, `field`, `limit` |
+
+---
+
+## Build your own full-text search (beta)
+
+Index your own documents. Accepts technical references, internal docs, or any content in NDJSON or JSON array format.
+
+```bash
+# Create an index
+satoric index create -n my-docs --language english
+
+# Upsert documents (NDJSON or JSON array, streamed)
+satoric index doc upsert -n my-docs --file docs.ndjson
+# or pipe directly
+python index.py | satoric index doc upsert -n my-docs
+
+# Search
+satoric search "webhook signature" -n my-docs --return "title,body:~256"
+```
+
+Contact us on [Discord](https://discord.gg/6kc2N9S3) to get started.
+
+---
 
 ## Requirements
 

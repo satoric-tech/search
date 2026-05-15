@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+NODE_MAJOR=$(node -e "process.stdout.write(process.version.slice(1).split('.')[0])")
+SCRIPT="$(dirname "$0")/../dist/cli.js"
+if [ "$NODE_MAJOR" -ge 24 ] 2>/dev/null; then
+  exec node --use-system-ca "$SCRIPT" "$@"
+else
+  exec node "$SCRIPT" "$@"
+fi

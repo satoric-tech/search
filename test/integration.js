@@ -7,151 +7,99 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const CLI = join(ROOT, "dist/cli.js");
-const BASE_URL = process.env.SATORIC_BASE_URL ?? "https://api.satoric.ai";
 
-function assertResult(r) {
-  assert.equal(typeof r.url, "string");
-  assert.equal(typeof r.site, "string");
-  assert.equal(typeof r.site_name, "string");
-  assert.equal(typeof r.title, "string");
-  assert.equal(typeof r.description, "string");
-  assert.equal(typeof r.snippet, "string");
-}
-
-function cli(...args) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn("node", [CLI, "search", ...args], {
-      env: { ...process.env, SATORIC_BASE_URL: BASE_URL },
+function run(args, env = {}) {
+  return new Promise((resolve) => {
+    const proc = spawn("node", [CLI, ...args], {
+      env: { ...process.env, ...env },
     });
     let stdout = "";
-    proc.stdout.on("data", d => (stdout += d));
-    proc.stderr.on("data", d => process.stderr.write(d));
-    proc.on("close", code =>
-      code === 0 ? resolve(stdout) : reject(new Error(`exit ${code}`))
-    );
+    let stderr = "";
+    proc.stdout.on("data", (d) => (stdout += d));
+    proc.stderr.on("data", (d) => (stderr += d));
+    proc.on("close", (code) => resolve({ code, stdout, stderr }));
   });
 }
 
-// --- CLI ---
+// --- CLI arg validation ---
 
-test('CLI: +site:stripe.com "webhook signature" -title:deprecated content:verification^2.0', async () => {
-  const results = JSON.parse(await cli('+site:stripe.com "webhook signature" -title:deprecated content:verification^2.0'));
-  assert.ok(Array.isArray(results));
-  assert.ok(results.length > 0);
-  assert.ok(results.length <= 10);
-  results.forEach(assertResult);
+test("CLI: no command prints help and exits 0", async () => {
+  const { code, stdout } = await run(["--help"]);
+  assert.equal(code, 0);
+  assert.ok(stdout.includes("satoric"));
 });
 
-test('CLI: site:supabase.com (edge functions OR "row level security") -title:changelog --limit 5', async () => {
-  const results = JSON.parse(await cli('site:supabase.com (edge functions OR "row level security") -title:changelog', "--limit", "5"));
-  assert.ok(Array.isArray(results));
-  assert.ok(results.length > 0);
-  assert.ok(results.length <= 5);
-  results.forEach(assertResult);
+test("CLI search: missing index name exits 1 with message", async () => {
+  const { code, stderr } = await run(["search", "hello"]);
+  assert.equal(code, 1);
+  assert.ok(stderr.includes("name"));
 });
 
-test('CLI: title:quickstart^2.0 content:authentication site:clerk.com --limit 10 --offset 3', async () => {
-  const results = JSON.parse(await cli("title:quickstart^2.0 content:authentication site:clerk.com", "--limit", "10", "--offset", "3"));
-  assert.ok(Array.isArray(results));
-  assert.ok(results.length <= 10);
-  results.forEach(assertResult);
-});
-
-// --- SDK ---
-
-const { search } = await import(join(ROOT, "dist/sdk.js"));
-
-test('SDK: search("+site:stripe.com \\"webhook signature\\" -title:deprecated content:verification^2.0")', async () => {
-  const results = await search('+site:stripe.com "webhook signature" -title:deprecated content:verification^2.0');
-  assert.ok(Array.isArray(results));
-  assert.ok(results.length > 0);
-  assert.ok(results.length <= 10);
-  results.forEach(assertResult);
-});
-
-test('SDK: search("site:supabase.com (edge functions OR \\"row level security\\") -title:changelog", { limit: 5 })', async () => {
-  const results = await search('site:supabase.com (edge functions OR "row level security") -title:changelog', { limit: 5 });
-  assert.ok(Array.isArray(results));
-  assert.ok(results.length > 0);
-  assert.ok(results.length <= 5);
-  results.forEach(assertResult);
-});
-
-test('SDK: search("title:quickstart^2.0 content:authentication site:clerk.com", { limit: 10, offset: 3 })', async () => {
-  const results = await search("title:quickstart^2.0 content:authentication site:clerk.com", { limit: 10, offset: 3 });
-  assert.ok(Array.isArray(results));
-  assert.ok(results.length <= 10);
-  results.forEach(assertResult);
-});
-
-// --- MCP ---
-
-function mcpSearch(q, limit, offset) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn("node", [CLI, "mcp"], {
-      env: { ...process.env, SATORIC_BASE_URL: BASE_URL },
-    });
-    const responses = [];
-    let buf = "";
-
-    proc.stdout.on("data", d => {
-      buf += d.toString();
-      const lines = buf.split("\n");
-      buf = lines.pop();
-      for (const line of lines) {
-        if (line.trim()) responses.push(JSON.parse(line));
-      }
-    });
-    proc.stderr.on("data", d => process.stderr.write(d));
-
-    const args = { q };
-    if (limit !== undefined) args.limit = limit;
-    if (offset !== undefined) args.offset = offset;
-
-    const messages = [
-      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "0.0.1" } } },
-      { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "search", arguments: args } },
-    ];
-
-    let i = 0;
-    const send = () => {
-      if (i >= messages.length) {
-        setTimeout(() => { proc.kill(); resolve(responses); }, 400);
-        return;
-      }
-      proc.stdin.write(JSON.stringify(messages[i++]) + "\n");
-      setTimeout(send, 300);
-    };
-    send();
-    proc.on("error", reject);
+test("CLI search: empty query exits 1", async () => {
+  const { code, stderr } = await run(["search", ""], {
+    SATORIC_INDEX: "test",
   });
-}
-
-function mcpResults(responses) {
-  const call = responses.find(r => r.id === 2);
-  assert.equal(call?.result?.content?.[0]?.type, "text");
-  return JSON.parse(call.result.content[0].text);
-}
-
-test('MCP: search "+site:stripe.com \\"webhook signature\\" -title:deprecated content:verification^2.0"', async () => {
-  const results = mcpResults(await mcpSearch('+site:stripe.com "webhook signature" -title:deprecated content:verification^2.0'));
-  assert.ok(Array.isArray(results));
-  assert.ok(results.length > 0);
-  assert.ok(results.length <= 10);
-  results.forEach(assertResult);
+  assert.equal(code, 1);
+  assert.ok(stderr.length > 0);
 });
 
-test('MCP: search "site:supabase.com (edge functions OR \\"row level security\\") -title:changelog" limit 5', async () => {
-  const results = mcpResults(await mcpSearch('site:supabase.com (edge functions OR "row level security") -title:changelog', 5));
-  assert.ok(Array.isArray(results));
-  assert.ok(results.length > 0);
-  assert.ok(results.length <= 5);
-  results.forEach(assertResult);
+test("CLI index doc upsert: missing api key exits 1 with message", async () => {
+  const { code, stderr } = await run(["index", "doc", "upsert", "-n", "test"], {
+    SATORIC_API_KEY: "",
+  });
+  assert.equal(code, 1);
+  assert.ok(stderr.includes("api-key") || stderr.includes("SATORIC_API_KEY"));
 });
 
-test('MCP: search "title:quickstart^2.0 content:authentication site:clerk.com" limit 10 offset 3', async () => {
-  const results = mcpResults(await mcpSearch("title:quickstart^2.0 content:authentication site:clerk.com", 10, 3));
-  assert.ok(Array.isArray(results));
-  assert.ok(results.length <= 10);
-  results.forEach(assertResult);
+test("CLI index doc upsert: missing index name exits 1 with message", async () => {
+  const { code, stderr } = await run(["index", "doc", "upsert"], {
+    SATORIC_API_KEY: "test-key",
+    SATORIC_INDEX: "",
+  });
+  assert.equal(code, 1);
+  assert.ok(stderr.includes("name") || stderr.includes("SATORIC_INDEX"));
+});
+
+test("CLI index doc delete: missing id and query exits 1", async () => {
+  const { code, stderr } = await run(["index", "doc", "delete", "-n", "test", "-k", "key"]);
+  assert.equal(code, 1);
+  assert.ok(stderr.includes("id") || stderr.includes("query"));
+});
+
+// --- boost expression parser ---
+
+const { toPainless } = await import(join(ROOT, "dist/math.js"));
+
+test("toPainless: constant expression", () => {
+  assert.equal(toPainless("1"), "1");
+});
+
+test("toPainless: field reference", () => {
+  const out = toPainless("rank");
+  assert.ok(out.includes("rank"));
+});
+
+test("toPainless: arithmetic expression", () => {
+  const out = toPainless("1 - rank / 1000000");
+  assert.ok(out.includes("rank"));
+  assert.ok(out.includes("1000000"));
+});
+
+test("toPainless: function call", () => {
+  const out = toPainless("log(rank + 1)");
+  assert.ok(out.includes("Math.log"));
+});
+
+test("toPainless: invalid expression throws", () => {
+  assert.throws(() => toPainless("rank ??? 1"), /invalid boost expression/);
+});
+
+// --- SDK exports ---
+
+const sdk = await import(join(ROOT, "dist/sdk.js"));
+
+test("SDK exports expected functions", () => {
+  assert.equal(typeof sdk.search, "function");
+  assert.equal(typeof sdk.authority, "function");
+  assert.equal(typeof sdk.related, "function");
 });

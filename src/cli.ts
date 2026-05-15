@@ -1,23 +1,25 @@
 #!/usr/bin/env node
-import { runSearch } from "./search.js";
-import { runMcp } from "./mcp.js";
+import { Command } from "commander";
+import { version } from "./version.js";
+import { makeSearchCommand } from "./search.js";
+import { indexCommand } from "./indexes.js";
+import { mcpCommand } from "./mcp.js";
+import { authorityCommand, relatedCommand } from "./query.js";
 
-const [sub, ...rest] = process.argv.slice(2);
+const program = new Command("satoric")
+  .version(version)
+  .description("Search, index, and manage Satoric indexes")
+  .addHelpText(
+    "after",
+    `
+Environment:
+  SATORIC_API_KEY    API key for authenticated operations
+  SATORIC_INDEX      Default index name`
+  )
+  .addCommand(makeSearchCommand())
+  .addCommand(authorityCommand)
+  .addCommand(relatedCommand)
+  .addCommand(indexCommand)
+  .addCommand(mcpCommand);
 
-if (sub === "search") {
-  await runSearch(rest);
-} else if (sub === "mcp") {
-  await runMcp(rest);
-} else {
-  const help =
-    "Usage: satoric <command> [options]\n\n" +
-    "Commands:\n" +
-    "  search <query>   Search indexed documentation\n" +
-    "  mcp              Start the MCP server\n\n" +
-    "Run satoric <command> --help for command options.\n";
-  if (sub) {
-    process.stderr.write(`Unknown command: ${sub}\n\n${help}`);
-    process.exit(1);
-  }
-  process.stdout.write(help);
-}
+await program.parseAsync();
