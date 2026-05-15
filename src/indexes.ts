@@ -14,20 +14,17 @@ interface IndexConfig {
   mappings: Record<string, unknown>;
 }
 
-interface SnippetHint {
-  field: string;
-  size?: number;
-}
+type ReturnKind = "full" | "head" | "tail" | "snippet";
 
 interface ReturnField {
   field: string;
-  max_len?: number;
+  kind: ReturnKind;
+  size?: number;
 }
 
 interface Hints {
   id?: string;
   language?: string;
-  snippet?: SnippetHint[];
   return_fields?: ReturnField[];
   boost_script?: string;
 }
@@ -51,34 +48,36 @@ function loadConfig(filePath: string): IndexConfig {
   return parsed as IndexConfig;
 }
 
-function parseSnippetParam(s: string): SnippetHint[] {
-  return s
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const [field, sizeStr] = part.split(":");
-      const size = sizeStr ? parseInt(sizeStr) : undefined;
-      return { field: field.trim(), ...(size !== undefined ? { size } : {}) };
-    });
-}
-
 function parseReturnParam(s: string): ReturnField[] {
   return s
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean)
-    .map((part) => {
-      const [field, maxLenStr] = part.split(":");
-      const max_len = maxLenStr ? parseInt(maxLenStr) : undefined;
-      return { field: field.trim(), ...(max_len !== undefined ? { max_len } : {}) };
-    });
+    .map((part): ReturnField | null => {
+      const colonIdx = part.indexOf(":");
+      if (colonIdx === -1) {
+        return { field: part, kind: "full" };
+      }
+      const field = part.slice(0, colonIdx).trim();
+      const rest = part.slice(colonIdx + 1).trim();
+      if (!field) return null;
+      if (rest.startsWith("~")) {
+        const size = parseInt(rest.slice(1));
+        return isNaN(size) ? null : { field, kind: "snippet", size };
+      }
+      if (rest.startsWith("-")) {
+        const size = parseInt(rest.slice(1));
+        return isNaN(size) ? null : { field, kind: "tail", size };
+      }
+      const size = parseInt(rest);
+      return isNaN(size) ? null : { field, kind: "head", size };
+    })
+    .filter((f): f is ReturnField => f !== null);
 }
 
 function buildCreateHints(options: {
   id?: string;
   language?: string;
-  snippet?: string;
   return?: string;
   boost?: string;
 }): Hints | undefined {
@@ -93,10 +92,6 @@ function buildCreateHints(options: {
     hints.language = options.language;
     hasHints = true;
   }
-  if (options.snippet) {
-    hints.snippet = parseSnippetParam(options.snippet);
-    hasHints = true;
-  }
   if (options.return) {
     hints.return_fields = parseReturnParam(options.return);
     hasHints = true;
@@ -109,18 +104,10 @@ function buildCreateHints(options: {
   return hasHints ? hints : undefined;
 }
 
-function buildUpdateHints(options: {
-  snippet?: string;
-  return?: string;
-  boost?: string;
-}): Hints | undefined {
+function buildUpdateHints(options: { return?: string; boost?: string }): Hints | undefined {
   const hints: Hints = {};
   let hasHints = false;
 
-  if (options.snippet) {
-    hints.snippet = parseSnippetParam(options.snippet);
-    hasHints = true;
-  }
   if (options.return) {
     hints.return_fields = parseReturnParam(options.return);
     hasHints = true;
@@ -225,8 +212,7 @@ const createCommand = new Command("create")
   .description("Create an index")
   .option("--id <field>", "field used as document ID")
   .option("--language <lang>", "default analyzer language, e.g. english")
-  .option("--snippet <spec>", "snippet fields, e.g. body:256,title:128")
-  .option("--return <spec>", "return fields, e.g. url,title,description:128")
+  .option("--return <spec>", "return fields, e.g. url,title:128,body:~256,body:-256")
   .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"')
   .option("-C, --config <file>", "path to JSON or YAML config file (advanced)")
   .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
@@ -234,8 +220,14 @@ const createCommand = new Command("create")
   .addHelpText(
     "after",
     `
+Return field syntax:
+  url              full field value
+  title:128        first 128 chars  → title_head
+  body:-256        last 256 chars   → body_tail
+  body:~256        snippet (highlighted excerpt, 256 chars) → body_snippet
+
 Examples:
-  satoric index create -n my-docs --id url --language english --snippet body:256,title:128
+  satoric index create -n my-docs --id url --language english --return "url,title:128,body:~256"
   satoric index create -n my-docs --config my-docs.json`
   )
   .action(
@@ -245,7 +237,6 @@ Examples:
       config?: string;
       id?: string;
       language?: string;
-      snippet?: string;
       return?: string;
       boost?: string;
     }) => {
@@ -292,8 +283,7 @@ Examples:
 
 const updateCommand = new Command("update")
   .description("Update index search configuration")
-  .option("--snippet <spec>", "snippet fields, e.g. body:256,title:128")
-  .option("--return <spec>", "return fields, e.g. url,title,description:128")
+  .option("--return <spec>", "return fields, e.g. url,title:128,body:~256,body:-256")
   .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"')
   .option("-C, --config <file>", "path to JSON or YAML config file (advanced)")
   .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
@@ -301,18 +291,17 @@ const updateCommand = new Command("update")
   .addHelpText(
     "after",
     `
-Note: changing --snippet requires re-indexing documents for term vectors to take effect.
+Note: adding :~N (snippet) requires re-indexing documents for term vectors to take effect.
 
 Examples:
-  satoric index update -n my-docs --snippet body:256,title:128 --boost "1 - rank/1000000"
-  satoric index update -n my-docs --return url,title,description:128`
+  satoric index update -n my-docs --return "url,title:128,body:~256" --boost "1 - rank/1000000"
+  satoric index update -n my-docs --return "url,title:128,body:-256"`
   )
   .action(
     async (options: {
       name?: string;
       apiKey?: string;
       config?: string;
-      snippet?: string;
       return?: string;
       boost?: string;
     }) => {
@@ -351,11 +340,6 @@ Examples:
           apiKey
         );
         process.stdout.write(`Index '${name}' updated.\n`);
-        if (options.snippet) {
-          process.stderr.write(
-            `Note: snippet field changed — re-index documents for term vectors to take effect.\n`
-          );
-        }
       } catch (e) {
         process.stderr.write(`Error: ${(e as Error).message}\n`);
         process.exit(1);

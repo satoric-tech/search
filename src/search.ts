@@ -9,8 +9,7 @@ export function makeSearchCommand(): Command {
     .argument("<query...>", "search query (Lucene syntax supported)")
     .option("-l, --limit <number>", "max results", String(DEFAULT_LIMIT))
     .option("-p, --page <number>", "page number (1-indexed)", "1")
-    .option("--snippet <spec>", "snippet fields, e.g. body:256,title:128")
-    .option("--return <spec>", "return fields, e.g. url,title,description:128")
+    .option("--return <spec>", "return fields, e.g. url,title:128,body:~256,body:-256")
     .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"')
     .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
     .addHelpText(
@@ -34,7 +33,6 @@ Examples:
       const page = Math.max(1, parseInt(options["page"]!, 10));
       const offset = (page - 1) * parseInt(options["limit"]!, 10);
       if (offset > 0) url.searchParams.set("offset", String(offset));
-      if (options["snippet"]) url.searchParams.set("snippet", options["snippet"]!);
       if (options["return"]) url.searchParams.set("fields", options["return"]!);
       if (options["boost"]) {
         try {
