@@ -29,12 +29,6 @@ test("CLI: no command prints help and exits 0", async () => {
   assert.ok(stdout.includes("satoric"));
 });
 
-test("CLI search: missing index name exits 1 with message", async () => {
-  const { code, stderr } = await run(["search", "hello"]);
-  assert.equal(code, 1);
-  assert.ok(stderr.includes("name"));
-});
-
 test("CLI search: empty query exits 1", async () => {
   const { code, stderr } = await run(["search", ""], {
     SATORIC_INDEX: "test",

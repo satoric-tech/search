@@ -1,18 +1,8 @@
 import { DEFAULT_BASE_URL, DEFAULT_INDEX, DEFAULT_LIMIT } from "./constants.js";
 import { apiRequest } from "./client.js";
-import type {
-  SearchResponse,
-  SearchResult,
-  AuthorityResponse,
-  AuthorityResult,
-} from "./types.js";
+import type { SearchResponse, SearchResult, AuthorityResponse, AuthorityResult } from "./types.js";
 
-export type {
-  SearchResponse,
-  SearchResult,
-  AuthorityResponse,
-  AuthorityResult,
-};
+export type { SearchResponse, SearchResult, AuthorityResponse, AuthorityResult };
 
 export interface SearchOptions {
   index?: string;
@@ -67,4 +57,3 @@ export async function authority(
 
   return apiRequest<AuthorityResponse>("GET", url.toString());
 }
-
