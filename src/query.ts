@@ -58,39 +58,3 @@ Examples:
       }
     }
   );
-
-export const relatedCommand = new Command("related")
-  .description("Find terms statistically associated with a query")
-  .argument("<query...>", "search query")
-  .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
-  .option("--field <field>", "text field to analyze (e.g. body, title)")
-  .option("-l, --limit <n>", "max results", String(DEFAULT_LIMIT))
-  .addHelpText(
-    "after",
-    `
-Examples:
-  satoric related "mcp" -n llms-txt --field body
-  satoric related "payments api" -n llms-txt --field body --limit 20`
-  )
-  .action(
-    async (queryParts: string[], options: { name?: string; field?: string; limit?: string }) => {
-      const name = requireName(options);
-      if (!options.field) {
-        process.stderr.write("Error: --field is required (e.g. --field body)\n");
-        process.exit(1);
-      }
-      const query = queryParts.join(" ").trim();
-      const url = new URL(`${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(name)}/related`);
-      url.searchParams.set("q", query);
-      url.searchParams.set("field", options.field);
-      url.searchParams.set("limit", options.limit ?? String(DEFAULT_LIMIT));
-
-      try {
-        const raw = await queryGet(url);
-        process.stdout.write(JSON.stringify(raw, null, 2) + "\n");
-      } catch (e) {
-        process.stderr.write(`Error: ${(e as Error).message}\n`);
-        process.exit(1);
-      }
-    }
-  );

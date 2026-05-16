@@ -84,32 +84,6 @@ function buildServer(baseUrl: string): Server {
           required: ["q", "field"],
         },
       },
-      {
-        name: "related",
-        description:
-          "Find terms statistically associated with a query. Uses significant text aggregation to surface terms overrepresented in matching documents vs. the whole index.\n\n" +
-          "Useful for query expansion and discovering related concepts:\n" +
-          "  related('mcp', { field: 'body' })  → terms that co-occur with 'mcp' across docs",
-        inputSchema: {
-          type: "object" as const,
-          properties: {
-            q: {
-              type: "string",
-              description: "Seed query.",
-            },
-            field: {
-              type: "string",
-              description: "Text field to analyze (e.g. 'body', 'title').",
-            },
-            limit: {
-              type: "integer",
-              description: "Max terms to return (default: 10)",
-              default: 10,
-            },
-          },
-          required: ["q", "field"],
-        },
-      },
     ],
   }));
 
@@ -165,7 +139,7 @@ function buildServer(baseUrl: string): Server {
       return mcpFetch(url);
     }
 
-    if (name === "authority" || name === "related") {
+    if (name === "authority") {
       const rawField = args?.["field"];
       if (typeof rawField !== "string" || !rawField.trim()) {
         return {
@@ -173,8 +147,7 @@ function buildServer(baseUrl: string): Server {
           isError: true,
         };
       }
-      const endpoint = name === "authority" ? "authorities" : "related";
-      const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/${endpoint}`);
+      const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/authorities`);
       url.searchParams.set("q", q);
       url.searchParams.set("field", rawField.trim());
       url.searchParams.set("limit", String(limit));

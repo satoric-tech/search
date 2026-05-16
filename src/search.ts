@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { version } from "./version.js";
-import { DEFAULT_BASE_URL, DEFAULT_LIMIT } from "./constants.js";
+import { DEFAULT_BASE_URL, DEFAULT_INDEX, DEFAULT_LIMIT } from "./constants.js";
 import { toPainless } from "./math.js";
 
 export function makeSearchCommand(): Command {
@@ -11,7 +11,7 @@ export function makeSearchCommand(): Command {
     .option("-p, --page <number>", "page number (1-indexed)", "1")
     .option("--return <spec>", "return fields, e.g. url,title:128,body:~256,body:-256")
     .option("-b, --boost <expr>", 'boost expression, e.g. "1 - rank/1000000"')
-    .option("-n, --name <name>", "index name (default: $SATORIC_INDEX)")
+    .option("-n, --name <name>", `index name (default: ${DEFAULT_INDEX})`)
     .addHelpText(
       "after",
       `
@@ -21,11 +21,7 @@ Examples:
   satoric search -n llms-txt "openai docs"`
     )
     .action(async (queryParts: string[], options: Record<string, string>) => {
-      const index = options["name"] ?? process.env.SATORIC_INDEX;
-      if (!index) {
-        process.stderr.write("Error: -n/--name is required (or set SATORIC_INDEX)\n");
-        process.exit(1);
-      }
+      const index = options["name"] ?? DEFAULT_INDEX;
       const query = queryParts.join(" ").trim();
       const url = new URL(`${DEFAULT_BASE_URL}/indexes/${encodeURIComponent(index)}/search`);
       url.searchParams.set("q", query);

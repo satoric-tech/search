@@ -5,8 +5,6 @@ import type {
   SearchResult,
   AuthorityResponse,
   AuthorityResult,
-  RelatedResponse,
-  RelatedTerm,
 } from "./types.js";
 
 export type {
@@ -14,8 +12,6 @@ export type {
   SearchResult,
   AuthorityResponse,
   AuthorityResult,
-  RelatedResponse,
-  RelatedTerm,
 };
 
 export interface SearchOptions {
@@ -72,26 +68,3 @@ export async function authority(
   return apiRequest<AuthorityResponse>("GET", url.toString());
 }
 
-export interface RelatedOptions {
-  index?: string;
-  field: string;
-  limit?: number;
-  /** @internal */
-  baseUrl?: string;
-}
-
-export async function related(query: string, options: RelatedOptions): Promise<RelatedResponse> {
-  const {
-    index = DEFAULT_INDEX,
-    field,
-    limit = DEFAULT_LIMIT,
-    baseUrl = DEFAULT_BASE_URL,
-  } = options;
-
-  const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/related`);
-  url.searchParams.set("q", query);
-  url.searchParams.set("field", field);
-  url.searchParams.set("limit", String(limit));
-
-  return apiRequest<RelatedResponse>("GET", url.toString());
-}

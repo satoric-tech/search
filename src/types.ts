@@ -34,12 +34,3 @@ export interface AuthorityResult {
 export interface AuthorityResponse {
   results: AuthorityResult[];
 }
-
-export interface RelatedTerm {
-  term: string;
-  score: number;
-}
-
-export interface RelatedResponse {
-  results: RelatedTerm[];
-}

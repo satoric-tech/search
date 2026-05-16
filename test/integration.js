@@ -101,5 +101,4 @@ const sdk = await import(join(ROOT, "dist/sdk.js"));
 test("SDK exports expected functions", () => {
   assert.equal(typeof sdk.search, "function");
   assert.equal(typeof sdk.authority, "function");
-  assert.equal(typeof sdk.related, "function");
 });
