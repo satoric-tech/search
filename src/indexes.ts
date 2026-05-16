@@ -20,6 +20,7 @@ interface ReturnField {
   field: string;
   kind: ReturnKind;
   size?: number;
+  num_fragments?: number;
 }
 
 interface Hints {
@@ -62,8 +63,14 @@ function parseReturnParam(s: string): ReturnField[] {
       const rest = part.slice(colonIdx + 1).trim();
       if (!field) return null;
       if (rest.startsWith("~")) {
-        const size = parseInt(rest.slice(1));
-        return isNaN(size) ? null : { field, kind: "snippet", size };
+        const fragSpec = rest.slice(1);
+        const slashIdx = fragSpec.indexOf("/");
+        const sizeStr = slashIdx === -1 ? fragSpec : fragSpec.slice(0, slashIdx);
+        const size = parseInt(sizeStr);
+        if (isNaN(size)) return null;
+        const num_fragments = slashIdx !== -1 ? parseInt(fragSpec.slice(slashIdx + 1)) : undefined;
+        if (num_fragments !== undefined && isNaN(num_fragments)) return null;
+        return { field, kind: "snippet", size, num_fragments };
       }
       if (rest.startsWith("-")) {
         const size = parseInt(rest.slice(1));
