@@ -12,11 +12,7 @@ export interface SearchOptions {
 }
 
 export async function search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
-  const {
-    limit = DEFAULT_LIMIT,
-    offset = 0,
-    baseUrl = DEFAULT_BASE_URL,
-  } = options;
+  const { limit = DEFAULT_LIMIT, offset = 0, baseUrl = DEFAULT_BASE_URL } = options;
 
   const url = new URL(`${baseUrl}/search`);
   url.searchParams.set("q", query);
