@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -33,6 +33,8 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    env:
+      SATORIC_BASE_URL: ${{ github.event_name == 'pull_request' && secrets.SATORIC_STAGING_URL || secrets.SATORIC_PRODUCTION_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

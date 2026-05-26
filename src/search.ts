@@ -1,80 +1,55 @@
+import { Command } from "commander";
 import { version } from "./version.js";
 import { DEFAULT_BASE_URL, DEFAULT_LIMIT } from "./constants.js";
 
-interface Result {
-  url: string;
-  site: string;
-  title: string;
-  snippet: string;
-}
+export function makeSearchCommand(): Command {
+  return new Command("search")
+    .description("Search developer documentation")
+    .argument("<query...>", "search query (Lucene syntax supported)")
+    .option("-l, --limit <number>", "max results", String(DEFAULT_LIMIT))
+    .option("-p, --page <number>", "page number (1-indexed)", "1")
+    .option("-o, --offset <number>", "results to skip")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  satoric search "openai docs"
+  satoric search "site:vercel.com deployment" --limit 20
+  satoric search "webhook signature verification"`
+    )
+    .action(async (queryParts: string[], options: Record<string, string>) => {
+      const query = queryParts.join(" ").trim();
+      const url = new URL(`${DEFAULT_BASE_URL}/search`);
+      url.searchParams.set("q", query);
+      url.searchParams.set("limit", options["limit"]!);
+      const limit = parseInt(options["limit"]!, 10);
+      let offset: number;
+      if (options["offset"] !== undefined) {
+        offset = Math.max(0, parseInt(options["offset"]!, 10));
+      } else {
+        const page = Math.max(1, parseInt(options["page"]!, 10));
+        offset = (page - 1) * limit;
+      }
+      if (offset > 0) url.searchParams.set("offset", String(offset));
 
-export async function runSearch(argv: string[]): Promise<void> {
-  const positional: string[] = [];
-  let limit = DEFAULT_LIMIT;
-  let offset = 0;
-  const baseUrl = DEFAULT_BASE_URL;
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--help" || arg === "-h") {
-      process.stdout.write(
-        "Usage: satoric search <query> [options]\n\n" +
-          "Query syntax:\n" +
-          "  <query>              Search across site, title, and content\n" +
-          "  site:<domain>        Scope to a domain  e.g. site:stripe.com\n" +
-          "  title:<term>         Match page title   e.g. title:authentication\n" +
-          "  content:<term>       Match page body    e.g. content:webhook\n" +
-          '  "phrase"             Exact phrase match e.g. "webhook signature"\n' +
-          "  +term -term          Require / exclude terms\n\n" +
-          "Options:\n" +
-          "  --limit,  -l <n>    Max results (default: 10)\n" +
-          "  --offset, -o <n>    Results to skip, for pagination (default: 0)\n" +
-          "  --help,  -h         Show this help\n"
-      );
-      process.exit(0);
-    } else if (arg === "--limit" || arg === "-l") {
-      limit = parseInt(argv[++i] ?? "10", 10);
-    } else if (arg === "--offset" || arg === "-o") {
-      offset = parseInt(argv[++i] ?? "0", 10);
-    } else if (!arg.startsWith("-")) {
-      positional.push(arg);
-    }
-  }
-
-  const query = positional.join(" ").trim();
-  if (!query) {
-    process.stderr.write("Error: query is required\nUsage: satoric search <query>\n");
-    process.exit(1);
-  }
-
-  const url = new URL(`${baseUrl}/search`);
-  url.searchParams.set("q", query);
-  url.searchParams.set("limit", String(limit));
-  if (offset > 0) url.searchParams.set("offset", String(offset));
-
-  let data: { results: Result[]; total: number };
-  try {
-    const res = await fetch(url.toString(), {
-      headers: {
-        "User-Agent": `satoric-cli/${version}`,
-      },
+      try {
+        const res = await fetch(url.toString(), {
+          headers: { "User-Agent": `satoric/${version}` },
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: string } | null;
+          process.stderr.write(`Error: ${body?.error ?? `HTTP ${res.status}`}\n`);
+          process.exit(1);
+        }
+        const raw = (await res.json()) as Record<string, unknown>;
+        if (!raw || !Array.isArray(raw["results"])) {
+          process.stderr.write("Error: unexpected response format from server\n");
+          process.exit(1);
+        }
+        process.stdout.write(JSON.stringify(raw["results"], null, 2) + "\n");
+      } catch (e) {
+        process.stderr.write(`Error: ${(e as Error).message}\n`);
+        process.exit(1);
+      }
     });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      const msg = body?.error ?? `HTTP ${res.status}`;
-      process.stderr.write(`Error: ${msg}\n`);
-      process.exit(1);
-    }
-    const raw = (await res.json()) as Record<string, unknown>;
-    if (!raw || !Array.isArray(raw.results)) {
-      process.stderr.write("Error: unexpected response format from server\n");
-      process.exit(1);
-    }
-    data = raw as { results: Result[]; total: number };
-  } catch (e) {
-    process.stderr.write(`Error: ${(e as Error).message}\n`);
-    process.exit(1);
-  }
-
-  process.stdout.write(JSON.stringify(data.results, null, 2) + "\n");
 }

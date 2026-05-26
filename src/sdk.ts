@@ -1,14 +1,8 @@
-import { version } from "./version.js";
 import { DEFAULT_BASE_URL, DEFAULT_LIMIT } from "./constants.js";
+import { apiRequest } from "./client.js";
+import type { SearchResponse, SearchResult } from "./types.js";
 
-export interface SearchResult {
-  url: string;
-  site: string;
-  site_name: string;
-  title: string;
-  description: string;
-  snippet: string;
-}
+export type { SearchResponse, SearchResult };
 
 export interface SearchOptions {
   limit?: number;
@@ -25,15 +19,6 @@ export async function search(query: string, options: SearchOptions = {}): Promis
   url.searchParams.set("limit", String(limit));
   if (offset > 0) url.searchParams.set("offset", String(offset));
 
-  const response = await fetch(url.toString(), {
-    headers: { "User-Agent": `satoric-sdk/${version}` },
-  });
-
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `HTTP ${response.status}`);
-  }
-
-  const data = (await response.json()) as { results: SearchResult[]; total: number };
-  return data.results;
+  const response = await apiRequest<SearchResponse>("GET", url.toString());
+  return response.results;
 }
