@@ -8,6 +8,7 @@ export function makeSearchCommand(): Command {
     .argument("<query...>", "search query (Lucene syntax supported)")
     .option("-l, --limit <number>", "max results", String(DEFAULT_LIMIT))
     .option("-p, --page <number>", "page number (1-indexed)", "1")
+    .option("-o, --offset <number>", "results to skip")
     .addHelpText(
       "after",
       `
@@ -21,8 +22,14 @@ Examples:
       const url = new URL(`${DEFAULT_BASE_URL}/search`);
       url.searchParams.set("q", query);
       url.searchParams.set("limit", options["limit"]!);
-      const page = Math.max(1, parseInt(options["page"]!, 10));
-      const offset = (page - 1) * parseInt(options["limit"]!, 10);
+      const limit = parseInt(options["limit"]!, 10);
+      let offset: number;
+      if (options["offset"] !== undefined) {
+        offset = Math.max(0, parseInt(options["offset"]!, 10));
+      } else {
+        const page = Math.max(1, parseInt(options["page"]!, 10));
+        offset = (page - 1) * limit;
+      }
       if (offset > 0) url.searchParams.set("offset", String(offset));
 
       try {
@@ -39,7 +46,7 @@ Examples:
           process.stderr.write("Error: unexpected response format from server\n");
           process.exit(1);
         }
-        process.stdout.write(JSON.stringify(raw, null, 2) + "\n");
+        process.stdout.write(JSON.stringify(raw["results"], null, 2) + "\n");
       } catch (e) {
         process.stderr.write(`Error: ${(e as Error).message}\n`);
         process.exit(1);

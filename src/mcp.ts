@@ -88,8 +88,9 @@ function buildServer(baseUrl: string): Server {
             isError: true,
           };
         }
-        const data = await response.json();
-        return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+        const data = (await response.json()) as { results?: unknown };
+        const results = Array.isArray(data?.results) ? data.results : data;
+        return { content: [{ type: "text" as const, text: JSON.stringify(results, null, 2) }] };
       } catch (e) {
         return {
           content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],

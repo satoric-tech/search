@@ -13,7 +13,10 @@ function tokenize(expr: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   while (i < expr.length) {
-    if (/\s/.test(expr[i])) { i++; continue; }
+    if (/\s/.test(expr[i])) {
+      i++;
+      continue;
+    }
     if (/[0-9]/.test(expr[i]) || (expr[i] === "." && /[0-9]/.test(expr[i + 1] ?? ""))) {
       let s = "";
       while (i < expr.length && /[0-9.]/.test(expr[i])) s += expr[i++];
@@ -25,9 +28,11 @@ function tokenize(expr: string): Token[] {
     } else if ("+-*/".includes(expr[i])) {
       tokens.push({ type: "op", val: expr[i++] });
     } else if (expr[i] === "(") {
-      tokens.push({ type: "lparen" }); i++;
+      tokens.push({ type: "lparen" });
+      i++;
     } else if (expr[i] === ")") {
-      tokens.push({ type: "rparen" }); i++;
+      tokens.push({ type: "rparen" });
+      i++;
     } else {
       throw new Error(`unexpected character '${expr[i]}' in boost expression`);
     }

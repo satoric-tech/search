@@ -11,7 +11,7 @@ export interface SearchOptions {
   baseUrl?: string;
 }
 
-export async function search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
+export async function search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
   const { limit = DEFAULT_LIMIT, offset = 0, baseUrl = DEFAULT_BASE_URL } = options;
 
   const url = new URL(`${baseUrl}/search`);
@@ -19,5 +19,6 @@ export async function search(query: string, options: SearchOptions = {}): Promis
   url.searchParams.set("limit", String(limit));
   if (offset > 0) url.searchParams.set("offset", String(offset));
 
-  return apiRequest<SearchResponse>("GET", url.toString());
+  const response = await apiRequest<SearchResponse>("GET", url.toString());
+  return response.results;
 }
