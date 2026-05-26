@@ -1,5 +1,6 @@
+import { Command } from "commander";
 import { version } from "./version.js";
-import { DEFAULT_BASE_URL, DEFAULT_LIMIT } from "./constants.js";
+import { DEFAULT_BASE_URL, DEFAULT_INDEX, DEFAULT_LIMIT } from "./constants.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
@@ -56,18 +57,38 @@ function buildServer(baseUrl: string): Server {
           required: ["q"],
         },
       },
+      {
+        name: "authority",
+        description:
+          "Find which sites have the most coverage for a topic. Aggregates top field values across documents matching a query.\n\n" +
+          "Use this to discover authoritative sources before searching for specifics:\n" +
+          "  authority('mcp server', { field: 'site' })  → which sites write most about MCP\n" +
+          "  authority('payments api', { field: 'site' }) → top payment documentation sites",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            q: {
+              type: "string",
+              description: "Search query to find matching documents.",
+            },
+            field: {
+              type: "string",
+              description: "Field to aggregate on. Use 'site' to find top domains.",
+            },
+            limit: {
+              type: "integer",
+              description: "Max results to return (default: 10)",
+              default: 10,
+            },
+          },
+          required: ["q", "field"],
+        },
+      },
     ],
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-
-    if (name !== "search") {
-      return {
-        content: [{ type: "text" as const, text: `Unknown tool: ${name}` }],
-        isError: true,
-      };
-    }
 
     const rawQ = args?.["q"];
     if (typeof rawQ !== "string" || !rawQ.trim()) {
@@ -78,67 +99,72 @@ function buildServer(baseUrl: string): Server {
     }
     const q = rawQ.trim();
 
+    const index = DEFAULT_INDEX;
     const rawLimit = args?.["limit"];
-    const limit = Math.min(50, Math.max(1, Math.floor(Number(rawLimit) || DEFAULT_LIMIT)));
-    const rawOffset = args?.["offset"];
-    const offset = Math.max(0, Math.floor(Number(rawOffset) || 0));
+    const limit = Math.max(1, Math.floor(Number(rawLimit) || DEFAULT_LIMIT));
 
-    const url = new URL(`${baseUrl}/search`);
-    url.searchParams.set("q", q);
-    url.searchParams.set("limit", String(limit));
-    if (offset > 0) url.searchParams.set("offset", String(offset));
-
-    try {
-      const response = await fetch(url.toString(), {
-        headers: {
-          "User-Agent": `satoric-mcp/${version}`,
-        },
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        const msg = body?.error ?? `HTTP ${response.status}`;
+    async function mcpFetch(
+      url: URL
+    ): Promise<{ content: { type: "text"; text: string }[]; isError?: boolean }> {
+      try {
+        const response = await fetch(url.toString(), {
+          headers: { "User-Agent": `satoric-mcp/${version}` },
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as { error?: string } | null;
+          return {
+            content: [
+              { type: "text" as const, text: `Error: ${body?.error ?? `HTTP ${response.status}`}` },
+            ],
+            isError: true,
+          };
+        }
+        const data = await response.json();
+        return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+      } catch (e) {
         return {
-          content: [{ type: "text" as const, text: `Error: ${msg}` }],
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
           isError: true,
         };
       }
-      const data = (await response.json()) as { results: unknown[]; total: number };
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(data.results, null, 2) }],
-      };
-    } catch (e) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
-        isError: true,
-      };
     }
+
+    if (name === "search") {
+      const rawOffset = args?.["offset"];
+      const offset = Math.max(0, Math.floor(Number(rawOffset) || 0));
+      const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/search`);
+      url.searchParams.set("q", q);
+      url.searchParams.set("limit", String(Math.min(50, limit)));
+      if (offset > 0) url.searchParams.set("offset", String(offset));
+      return mcpFetch(url);
+    }
+
+    if (name === "authority") {
+      const rawField = args?.["field"];
+      if (typeof rawField !== "string" || !rawField.trim()) {
+        return {
+          content: [{ type: "text" as const, text: "Error: field is required" }],
+          isError: true,
+        };
+      }
+      const url = new URL(`${baseUrl}/indexes/${encodeURIComponent(index)}/authorities`);
+      url.searchParams.set("q", q);
+      url.searchParams.set("field", rawField.trim());
+      url.searchParams.set("limit", String(limit));
+      return mcpFetch(url);
+    }
+
+    return {
+      content: [{ type: "text" as const, text: `Unknown tool: ${name}` }],
+      isError: true,
+    };
   });
 
   return server;
 }
 
-export async function runMcp(argv: string[]): Promise<void> {
+export async function runMcp(transport: string, port: number): Promise<void> {
   const baseUrl = DEFAULT_BASE_URL;
-  let transport = "stdio";
-  let port = 4000;
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--help" || arg === "-h") {
-      process.stdout.write(
-        "Usage: satoric mcp [options]\n\n" +
-          "Options:\n" +
-          "  --transport <mode>     Transport mode: stdio or sse (default: stdio)\n" +
-          "  --port <n>             Port for SSE transport (default: 4000)\n" +
-          "  --help, -h             Show this help\n"
-      );
-      process.exit(0);
-    } else if (arg === "--transport" && argv[i + 1]) {
-      transport = argv[++i];
-    } else if (arg === "--port" && argv[i + 1]) {
-      port = parseInt(argv[++i], 10);
-    }
-  }
 
   if (transport === "sse") {
     const sessions = new Map<string, SSEServerTransport>();
@@ -180,3 +206,11 @@ export async function runMcp(argv: string[]): Promise<void> {
     await buildServer(baseUrl).connect(new StdioServerTransport());
   }
 }
+
+export const mcpCommand = new Command("mcp")
+  .description("Start the MCP server")
+  .option("--transport <mode>", "transport mode: stdio or sse", "stdio")
+  .option("--port <n>", "port for SSE transport", "4000")
+  .action(async (options: { transport: string; port: string }) => {
+    await runMcp(options.transport, parseInt(options.port, 10));
+  });
